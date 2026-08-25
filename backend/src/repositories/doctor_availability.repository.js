@@ -15,13 +15,13 @@ const getDoctorScheduleByDoctor = async (doctorId) => {
 const getDoctorScheduleByDay = async (id, day_of_week) => {
     return await DoctorAvailability.findAll({
         // lay dong nao co doctor_id = id va day_of_week = day_of_week va active = true
-        where:{
+        where: {
             doctor_id: id,
             day_of_week: day_of_week,
             active: true
         },
         // chon nhng cot nao muon lay ra tu db
-        attributes: ["id", "day_of_week","start_time", "end_time", "slot_duration_minutes"]
+        attributes: ["id", "day_of_week", "start_time", "end_time", "slot_duration_minutes"]
     });
 };
 
@@ -31,24 +31,41 @@ const createSchedule = async (data) => {
 
 const updateSchedule = async (id, data) => {
     return await DoctorAvailability.update(data, {
-        where: {id}
+        where: { id }
     });
-    
+
     // kiem tra co cap nhat duoc khong
-    if(result[0] === 0) {
+    if (result[0] === 0) {
         throw new Error("Không tìm thấy lịch hoặc không có thay đổi");
     }
     return await DoctorAvailability.findByPk(id);
-    
+
 };
 
 const findScheduleById = async (id) => {
-    return await DoctorAvailability.findByPk(id);  
+    return await DoctorAvailability.findByPk(id);
 };
+
+const deleteSchedule = async (id) => {
+    return await DoctorAvailability.destroy({
+        where: { id }
+    });
+}
+
+const disableSchedule = async (id) => {
+    return await DoctorAvailability.update(
+        { active: false },
+        { where: { id } }
+    );
+};
+
 
 module.exports = {
     getDoctorSchedule: getDoctorScheduleByDoctor,
     getDoctorScheduleByDay,
     createSchedule,
-    updateSchedule
+    updateSchedule,
+    findScheduleById,
+    deleteSchedule,
+    disableSchedule
 };
