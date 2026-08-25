@@ -86,9 +86,19 @@ const updateSchedule = async (id, data) => {
     }
     return await doctorRepository.updateSchedule(id, data);
 }
+
+const deleteSchedule = async (id) => {
+    const schedule = await doctorRepository.findScheduleById(id);
+    if (!schedule) {
+        throw new ApiError(404, "Không tìm thấy lịch làm việc");
+    }
+    return await doctorRepository.deleteSchedule(id);  
+}
 module.exports = {
+
     getDoctorSchedule,
     getDoctorScheduleByDay,
     createSchedule,
-    updateSchedule
+    updateSchedule,
+    deleteSchedule
 };
