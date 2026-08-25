@@ -24,3 +24,14 @@ const getDoctorSchedule = async (doctorId) => {
 });
     return result;
 };
+
+const getDoctorScheduleByDay = async (id, day_of_week) => {
+    const schedule = await doctorRepository.getDoctorScheduleByDay(id, day_of_week);
+    // tra ve mang rong neu khong tim thay lich lam viec (khong phai loi)
+    return schedule || [];
+};
+
+module.exports = {
+    getDoctorSchedule,
+    getDoctorScheduleByDay
+};
