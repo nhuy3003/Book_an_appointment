@@ -25,8 +25,14 @@ const getDoctorScheduleByDay = async (id, day_of_week) => {
     });
 };
 
+const createSchedule = async (data) => {
+    return await DoctorAvailability.create(data);
+};
+
+
 
 module.exports = {
     getDoctorSchedule: getDoctorScheduleByDoctor,
-    getDoctorScheduleByDay: getDoctorScheduleByDay
+    getDoctorScheduleByDay,
+    createSchedule
 };
