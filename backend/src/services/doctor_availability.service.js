@@ -65,8 +65,30 @@ const createSchedule = async (data) => {
     return await doctorRepository.createSchedule(data);
 };
 
+const updateSchedule = async (id, data) => {
+    const schedule = await doctorRepository.findScheduleById(id);
+    if (!schedule) {
+        throw new ApiError(404, "Không tìm thấy lịch làm việc");
+    }
+
+    // xac thuc cac truong thoi gian (neu co)
+    if(data.start_time !== undefined || data.end_time !== undefined) {
+        const startTime = data.start_time !== undefined ? data.start_time : schedule.start_time;
+        const endTime = data.end_time !== undefined ? data.end_time : schedule.end_time;
+        
+        if(startTime >= endTime) {
+            throw new ApiError(400, "Giờ bắt đầu phải nhỏ hơn giờ kết thúc");
+        }
+    }
+    // xac thuc slot_duration_minutes (neu co)
+    if(data.slot_duration_minutes !== undefined && data.slot_duration_minutes <= 0) {
+        throw new ApiError(400, "Thời lượng slot phải lớn hơn 0");
+    }
+    return await doctorRepository.updateSchedule(id, data);
+}
 module.exports = {
     getDoctorSchedule,
     getDoctorScheduleByDay,
     createSchedule,
+    updateSchedule
 };
