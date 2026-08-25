@@ -11,3 +11,22 @@ const getDoctorScheduleByDoctor = async (doctorId) => {
     return schedule;
 }
 
+// lay lich theo ngay lam viec
+const getDoctorScheduleByDay = async (id, day_of_week) => {
+    return await DoctorAvailability.findAll({
+        // lay dong nao co doctor_id = id va day_of_week = day_of_week va active = true
+        where:{
+            doctor_id: id,
+            day_of_week: day_of_week,
+            active: true
+        },
+        // chon nhng cot nao muon lay ra tu db
+        attributes: ["id", "day_of_week","start_time", "end_time", "slot_duration_minutes"]
+    });
+};
+
+
+module.exports = {
+    getDoctorSchedule: getDoctorScheduleByDoctor,
+    getDoctorScheduleByDay: getDoctorScheduleByDay
+};
