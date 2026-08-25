@@ -29,10 +29,26 @@ const createSchedule = async (data) => {
     return await DoctorAvailability.create(data);
 };
 
+const updateSchedule = async (id, data) => {
+    return await DoctorAvailability.update(data, {
+        where: {id}
+    });
+    
+    // kiem tra co cap nhat duoc khong
+    if(result[0] === 0) {
+        throw new Error("Không tìm thấy lịch hoặc không có thay đổi");
+    }
+    return await DoctorAvailability.findByPk(id);
+    
+};
 
+const findScheduleById = async (id) => {
+    return await DoctorAvailability.findByPk(id);  
+};
 
 module.exports = {
     getDoctorSchedule: getDoctorScheduleByDoctor,
     getDoctorScheduleByDay,
-    createSchedule
+    createSchedule,
+    updateSchedule
 };
