@@ -1,19 +1,12 @@
-const doctorRepository = require("../repositories/doctor.repository");
+const doctorAvailabilityRepository = require("../repositories/doctor_availability.repository");
 const ApiError = require("../utils/ApiError");
 
 const getDoctorSchedule = async (doctorId) => {
-    const schedules = await doctorRepository.getDoctorSchedule(doctorId);
+    const schedules = await doctorAvailabilityRepository.getDoctorSchedule(doctorId);
     const result = {};
 
     schedules.forEach(schedule => {
         const day = schedule.day_of_week;
-        if (!result[day]) {
-            result[day] = [];
-        }
-        result[day].push({
-            start_time: schedule.start_time,
-            end_time: schedule.end_time
-        });
         if (!result[day]) {
             result[day] = [];
         }
@@ -26,7 +19,7 @@ const getDoctorSchedule = async (doctorId) => {
 };
 
 const getDoctorScheduleByDay = async (id, day_of_week) => {
-    const schedule = await doctorRepository.getDoctorScheduleByDay(id, day_of_week);
+    const schedule = await doctorAvailabilityRepository.getDoctorScheduleByDay(id, day_of_week);
     // tra ve mang rong neu khong tim thay lich lam viec (khong phai loi)
     return schedule || [];
 };
@@ -62,11 +55,11 @@ const createSchedule = async (data) => {
         throw new ApiError(400, `Trường "active" phải là kiểu boolean`);
     }
 
-    return await doctorRepository.createSchedule(data);
+    return await doctorAvailabilityRepository.createSchedule(data);
 };
 
 const updateSchedule = async (id, data) => {
-    const schedule = await doctorRepository.findScheduleById(id);
+    const schedule = await doctorAvailabilityRepository.findScheduleById(id);
     if (!schedule) {
         throw new ApiError(404, "Không tìm thấy lịch làm việc");
     }
@@ -84,27 +77,27 @@ const updateSchedule = async (id, data) => {
     if (data.slot_duration_minutes !== undefined && data.slot_duration_minutes <= 0) {
         throw new ApiError(400, "Thời lượng slot phải lớn hơn 0");
     }
-    return await doctorRepository.updateSchedule(id, data);
+    return await doctorAvailabilityRepository.updateSchedule(id, data);
 };
 
 const deleteSchedule = async (id) => {
-    const schedule = await doctorRepository.findScheduleById(id);
+    const schedule = await doctorAvailabilityRepository.findScheduleById(id);
     if (!schedule) {
         throw new ApiError(404, "Không tìm thấy lịch làm việc");
     }
-    return await doctorRepository.deleteSchedule(id);
+    return await doctorAvailabilityRepository.deleteSchedule(id);
 }
 
 const disableSchedule = async (id) => {
-    const schedule = await doctorRepository.findScheduleById(id);
+    const schedule = await doctorAvailabilityRepository.findScheduleById(id);
     if (!schedule) {
         throw new ApiError(404, "Không tìm thấy lịch làm việc");
     }
-    return await doctorRepository.updateSchedule(id, { active: false });
+    return await doctorAvailabilityRepository.updateSchedule(id, { active: false });
 }
 
 const findScheduleById = async (id) => {
-    return await doctorRepository.findScheduleById(id);
+    return await doctorAvailabilityRepository.findScheduleById(id);
 };
 module.exports = {
     getDoctorSchedule,
