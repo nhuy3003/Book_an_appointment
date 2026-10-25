@@ -16,7 +16,7 @@ router.use("/dashboard", dashboardRoute);
 router.use("/doctor", doctorRoute);
 router.use("/notifications", notificationRoute);
 router.use("/mail", mailRoute);
-router.use("/doctor_availability", doctorAvailabilityRoute);
+router.use("/doctor-availability", doctorAvailabilityRoute);
 router.use("/reports", reportsRoute);
 
 module.exports = router;
