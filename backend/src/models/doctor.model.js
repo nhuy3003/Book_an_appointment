@@ -1,5 +1,7 @@
-const {DataTypes} = require("sequelize");
+const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
+
+// DB: doctor bảng có created_at, updated_at
 const Doctor = sequelize.define(
     "Doctor",
     {
@@ -7,7 +9,6 @@ const Doctor = sequelize.define(
             type: DataTypes.INTEGER,
             primaryKey: true,
             autoIncrement: true
-
         },
         full_name: DataTypes.STRING,
         email: DataTypes.STRING,
@@ -18,12 +19,16 @@ const Doctor = sequelize.define(
         image_url: DataTypes.STRING,
         experience_years: DataTypes.INTEGER,
         price_per_appointment: DataTypes.INTEGER,
-        bio: DataTypes.TEXT
-
+        bio: DataTypes.TEXT,
+        created_at: DataTypes.DATE,
+        updated_at: DataTypes.DATE
     },
     {
         tableName: "doctor",
-        timestamps: false
+        timestamps: true,
+        createdAt: "created_at",
+        updatedAt: "updated_at"
     }
 );
+
 module.exports = Doctor;

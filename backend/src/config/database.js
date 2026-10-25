@@ -4,11 +4,11 @@ const env = require("./env");
 const sequelize = new Sequelize(
     env.dbName,
     env.dbUser,
-    env.dbPass,
+    env.dbPassword,   // đổi từ env.dbPass -> env.dbPassword
     {
         host: env.dbHost,
         dialect: "mysql",
-        logging:false
+        logging: false
     }
 );
 
