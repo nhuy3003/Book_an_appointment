@@ -1,6 +1,7 @@
 const { DataTypes } = require("sequelize");
 const sequelize = require("../config/database");
 
+// DB: patient có thêm trường `password`
 const Patient = sequelize.define(
     "Patient",
     {
@@ -13,7 +14,8 @@ const Patient = sequelize.define(
         email: DataTypes.STRING,
         phone_number: DataTypes.STRING,
         address: DataTypes.STRING,
-        created_at: DataTypes.DATE,
+        password: DataTypes.STRING,  // có trong DB
+        created_at: DataTypes.DATE
     },
     {
         tableName: "patient",

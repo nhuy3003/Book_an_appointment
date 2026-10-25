@@ -1,7 +1,7 @@
 const { DataTypes } = require("sequelize");
-const sequelize = require("../config/database"); 
-const Doctor = require("../models/doctor.model");
-const DoctorAvailability = require("../models/doctor_availability.model");
+const sequelize = require("../config/database");
+
+// bookable_slot.status: enum('available','booked','off')
 
 const BookableSlot = sequelize.define("BookableSlot", {
     id: {
@@ -10,25 +10,18 @@ const BookableSlot = sequelize.define("BookableSlot", {
         autoIncrement: true,
     },
     doctor_id: DataTypes.INTEGER,
-    slot_date: DataTypes.DATE,
+    slot_date: DataTypes.DATEONLY,   // DATE (chỉ ngày, không giờ)
     start_time: DataTypes.TIME,
     end_time: DataTypes.TIME,
-    status: DataTypes.STRING,
+    status: {
+        type: DataTypes.ENUM("available", "booked", "off"),
+        defaultValue: "available"
+    },
     availability_id: DataTypes.INTEGER,
 },
-    {
-        tableName: "bookable_slot",
-        timestamps: false
-    }
-);
+{
+    tableName: "bookable_slot",
+    timestamps: false
+});
 
-// association
-BookableSlot.belongsTo(Doctor, {
-    foreignKey: "doctor_id"
-  });
-  
-  BookableSlot.belongsTo(DoctorAvailability, {
-    foreignKey: "availability_id"
-  });
-  
-  module.exports = BookableSlot;
+module.exports = BookableSlot;
