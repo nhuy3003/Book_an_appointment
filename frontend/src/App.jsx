@@ -1,6 +1,7 @@
 import React from 'react';
 import { Routes, Route } from 'react-router-dom';
 
+import { AuthProvider } from './context/AuthContext';
 import MainLayout from './components/layout/MainLayout';
 import ProtectedRoute from './routes/ProtectedRoute';
 
@@ -16,25 +17,26 @@ import DoctorAppointmentsPage from './pages/doctor/DoctorAppointmentsPage';
 
 function App() {
   return (
-    <Routes>
-      <Route element={<MainLayout />}>
-        {/* ===== PATIENT PORTAL (Public) - Dev 2 phụ trách ===== */}
-        <Route path="/" element={<HomePage />} />
-        <Route path="/doctors" element={<DoctorListPage />} />
-        <Route path="/booking-lookup" element={<BookingLookupPage />} />
+    <AuthProvider>
+      <Routes>
+        <Route element={<MainLayout />}>
+          {/* ===== PATIENT PORTAL (Public) - Dev 2 phụ trách ===== */}
+          <Route path="/" element={<HomePage />} />
+          <Route path="/doctors" element={<DoctorListPage />} />
+          <Route path="/booking-lookup" element={<BookingLookupPage />} />
 
-        {/* ===== DOCTOR PORTAL - Dev 1 phụ trách ===== */}
-        <Route path="/doctor/login" element={<DoctorLoginPage />} />
+          {/* ===== DOCTOR PORTAL - Dev 1 phụ trách ===== */}
+          <Route path="/doctor/login" element={<DoctorLoginPage />} />
 
-        {/* Các route bảo vệ (cần đăng nhập) */}
-        <Route element={<ProtectedRoute />}>
-          <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
-          <Route path="/doctor/appointments" element={<DoctorAppointmentsPage />} />
+          {/* Các route bảo vệ (cần đăng nhập) */}
+          <Route element={<ProtectedRoute />}>
+            <Route path="/doctor/schedule" element={<DoctorSchedulePage />} />
+            <Route path="/doctor/appointments" element={<DoctorAppointmentsPage />} />
+          </Route>
         </Route>
-      </Route>
-    </Routes>
+      </Routes>
+    </AuthProvider>
   );
 }
 
 export default App;
-
