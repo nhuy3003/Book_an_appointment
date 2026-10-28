@@ -1,0 +1,20 @@
+@import "tailwindcss";
+
+/* Custom theme */
+@theme {
+  --color-primary: #0ea5e9;
+  --color-primary-dark: #0284c7;
+  --color-primary-light: #e0f2fe;
+  --color-secondary: #10b981;
+  --color-accent: #f59e0b;
+  --color-danger: #ef4444;
+}
+
+/* Smooth scroll */
+html {
+  scroll-behavior: smooth;
+}
+
+body {
+  font-family: 'Inter', 'Segoe UI', sans-serif;
+}
