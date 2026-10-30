@@ -1,12 +1,6 @@
 const doctorService = require("../services/doctor_availability.service");
 
-// Trả lỗi theo statusCode của ApiError (mặc định 400)
-const sendError = (res, error) => res.status(error.statusCode || 400).json({
-    success: false,
-    message: error.message
-});
-
-const getDoctorSchedule = async(req, res) =>{
+const getDoctorSchedule = async (req, res, next) =>{
     try{
         const doctorId = req.params.id;
         
@@ -24,15 +18,12 @@ const getDoctorSchedule = async(req, res) =>{
             success: true,
             data: schedule
         });
-    }catch(error){
-        res.status(500).json({
-            success: false,
-            message: error.message
-        });
+    } catch (error) {
+        next(error);
     }
 };
 
-const getDoctorScheduleByDay = async(req, res) =>{
+const getDoctorScheduleByDay = async (req, res, next) =>{
   try{
     const id = req.params.id;
     const day = req.params.day;
@@ -58,15 +49,12 @@ const getDoctorScheduleByDay = async(req, res) =>{
         success: true,
         data: schedule
     });
-  }catch(error){
-    res.status(400).json({
-        success: false,
-        message: error.message
-    });
+  } catch (error) {
+    next(error);
   }
 };
 
-const createSchedule = async(req, res) => {
+const createSchedule = async (req, res, next) => {
     try {
         const data = req.body;
 
@@ -89,11 +77,11 @@ const createSchedule = async(req, res) => {
             message: `Tạo ca thành công, đã sinh ${result.slots?.created || 0} khung giờ khám`
         });
     } catch(error){
-        sendError(res, error);
+        next(error);
     }
 };
 
-const updateSchedule = async(req, res) => {
+const updateSchedule = async (req, res, next) => {
     try {
         const id = req.params.idCalendar;
         
@@ -137,11 +125,11 @@ const updateSchedule = async(req, res) => {
             data: result
         });
     } catch(error){
-        sendError(res, error);
+        next(error);
     }
 };
 
-const deleteSchedule = async(req, res) => {
+const deleteSchedule = async (req, res, next) => {
     try {
         const id = req.params.idCalendar;
         
@@ -180,11 +168,11 @@ const deleteSchedule = async(req, res) => {
         });
 
     } catch(error){
-        sendError(res, error);
+        next(error);
     }
 };
 
-const disableSchedule = async(req, res) =>{
+const disableSchedule = async (req, res, next) =>{
     try {
         const id = req.params.idCalendar;
         
@@ -220,12 +208,12 @@ const disableSchedule = async(req, res) =>{
         });
 
     } catch(error){
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Tạo nhiều ca cùng lúc (nhiều thứ x nhiều khung giờ) + tự sinh slot N tuần tới
-const bulkCreateSchedules = async (req, res) => {
+const bulkCreateSchedules = async (req, res, next) => {
     try {
         const result = await doctorService.bulkCreateSchedules(req.user.id, req.body);
         res.status(201).json({
@@ -235,12 +223,12 @@ const bulkCreateSchedules = async (req, res) => {
                 + (result.skipped.length ? ` (bỏ qua ${result.skipped.length} ca bị trùng giờ)` : "")
         });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Sinh slot theo khoảng ngày từ các mẫu lịch đang bật
-const generateSlots = async (req, res) => {
+const generateSlots = async (req, res, next) => {
     try {
         const { from, to } = req.body || {};
         const result = await doctorService.generateSlots(req.user.id, from, to);
@@ -250,43 +238,43 @@ const generateSlots = async (req, res) => {
             message: `Đã sinh ${result.created} khung giờ khám mới`
         });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Lấy tất cả mẫu lịch (kể cả đang tắt) của bác sĩ đang đăng nhập
-const getMyTemplates = async (req, res) => {
+const getMyTemplates = async (req, res, next) => {
     try {
         const data = await doctorService.getMyTemplates(req.user.id);
         res.json({ success: true, data });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Lấy slot theo khoảng ngày của bác sĩ đang đăng nhập
-const getMySlots = async (req, res) => {
+const getMySlots = async (req, res, next) => {
     try {
         const { from, to } = req.query;
         const data = await doctorService.getMySlots(req.user.id, from, to);
         res.json({ success: true, data });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Bật/tắt 1 slot
-const setSlotStatus = async (req, res) => {
+const setSlotStatus = async (req, res, next) => {
     try {
         const data = await doctorService.setSlotStatus(req.user.id, req.params.slotId, req.body?.status);
         res.json({ success: true, data });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 
 // Nghỉ cả ngày / mở lại ngày
-const setDayOff = async (req, res) => {
+const setDayOff = async (req, res, next) => {
     try {
         const { date, off } = req.body || {};
         const data = await doctorService.setDayOff(req.user.id, date, off !== false);
@@ -298,7 +286,7 @@ const setDayOff = async (req, res) => {
                 : `Đã mở lại lịch ngày ${date}`
         });
     } catch (error) {
-        sendError(res, error);
+        next(error);
     }
 };
 

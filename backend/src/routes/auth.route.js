@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const authController = require("../controllers/auth.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
+const { loginRules } = require("../middlewares/validate");
 /**
  * @swagger
  * tags:
@@ -34,7 +35,7 @@ const authMiddleware = require("../middlewares/auth.middleware");
  *       401:
  *         description: Sai thông tin đăng nhập
  */
-router.post("/login", authController.loginDoctor);
+router.post("/login", loginRules, authController.loginDoctor);
 
 
 /**
