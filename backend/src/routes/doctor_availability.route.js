@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const doctorController = require("../controllers/doctor_availability.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
+const { bulkScheduleRules } = require("../middlewares/validate");
 
 /**
  * @swagger
@@ -72,7 +73,7 @@ router.get("/me/slots", authMiddleware, doctorController.getMySlots);
  *               slot_duration_minutes: { type: integer, example: 30 }
  *               weeks: { type: integer, example: 4 }
  */
-router.post("/bulk", authMiddleware, doctorController.bulkCreateSchedules);
+router.post("/bulk", authMiddleware, bulkScheduleRules, doctorController.bulkCreateSchedules);
 
 /**
  * @swagger

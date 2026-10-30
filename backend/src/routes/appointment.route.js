@@ -2,6 +2,7 @@ const express = require("express");
 const router = express.Router();
 const appointmentController = require("../controllers/appointment.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
+const { createAppointmentRules } = require("../middlewares/validate");
 
 /**
  * @swagger
@@ -51,7 +52,7 @@ router.get("/code/:code", appointmentController.getAppointmentByCode);
  *       201:
  *         description: Tạo thành công
  */
-router.post("/create", appointmentController.createAppointment);
+router.post("/create", createAppointmentRules, appointmentController.createAppointment);
 
 
 /**

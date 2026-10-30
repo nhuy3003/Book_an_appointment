@@ -5,7 +5,7 @@ const {
   } = require("../services/reports.service");
   
   // GET /appointment-status
-  const getAppointmentStatusStats = async (req, res) => {
+  const getAppointmentStatusStats = async (req, res, next) => {
     try {
       const { month, year } = req.query;
   
@@ -19,13 +19,12 @@ const {
   
       res.json(data);
     } catch (err) {
-      console.error(err);
-      res.status(500).json({ message: "Server error" });
+      next(err);
     }
   };
   
   // GET /revenue
-  const getRevenueStats = async (req, res) => {
+  const getRevenueStats = async (req, res, next) => {
     try {
       const { year } = req.query;
   
@@ -38,7 +37,7 @@ const {
   
       res.json(data);
     } catch (err) {
-      res.status(500).json({ message: "Server error" });
+      next(err);
     }
   };
   
