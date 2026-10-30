@@ -22,35 +22,37 @@ const authMiddleware = require("../middlewares/auth.middleware");
  *     responses:
  *       200:
  *         description: Lấy danh sách thông báo thành công
- *         content:
- *           application/json:
- *             schema:
- *               type: array
- *               items:
- *                 type: object
- *                 properties:
- *                   id:
- *                     type: string
- *                     example: "abc123"
- *                   title:
- *                     type: string
- *                     example: Lịch hẹn mới
- *                   message:
- *                     type: string
- *                     example: Bạn có lịch hẹn mới từ bệnh nhân
- *                   isRead:
- *                     type: boolean
- *                     example: false
- *                   createdAt:
- *                     type: string
- *                     format: date-time
  *       401:
  *         description: Chưa đăng nhập
  */
-router.get(
-  "/",
-  authMiddleware,
-  notificationController.getNotificationsByDoctorId
-);
+router.get("/", authMiddleware, notificationController.getNotificationsByDoctorId);
+
+// Alias cho frontend gọi /notifications/my-notifications
+router.get("/my-notifications", authMiddleware, notificationController.getNotificationsByDoctorId);
+
+// Đánh dấu tất cả đã đọc - ĐẶT TRƯỚC /:id/read để tránh match nhầm
+router.patch("/read-all", authMiddleware, notificationController.markAllAsRead);
+
+/**
+ * @swagger
+ * /api/notifications/{id}/read:
+ *   patch:
+ *     summary: Đánh dấu 1 thông báo đã đọc
+ *     tags: [Notification]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: id
+ *         required: true
+ *         schema:
+ *           type: integer
+ *     responses:
+ *       200:
+ *         description: Đánh dấu đã đọc thành công
+ *       404:
+ *         description: Không tìm thấy thông báo
+ */
+router.patch("/:id/read", authMiddleware, notificationController.markAsRead);
 
 module.exports = router;

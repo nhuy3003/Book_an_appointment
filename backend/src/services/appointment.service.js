@@ -70,7 +70,33 @@ const createAppointment = async (data) => {
         throw new ApiError(400, "Bác sĩ bận ngày này");
     }
 
-    const appointment = await appointmentRepository.createAppointment(data);
+    // Nếu không có patient_id, tự động tìm hoặc tạo patient theo số điện thoại
+    let patientId = data.patient_id;
+    if (!patientId && data.phone_number) {
+        let patient = await patientRepository.findPatientByPhone(data.phone_number);
+        if (!patient) {
+            patient = await patientRepository.createPatient({
+                full_name: data.patient_name || "Bệnh nhân",
+                phone_number: data.phone_number,
+                email: data.email || null,
+            });
+        }
+        patientId = patient.id;
+    }
+
+    if (!patientId) {
+        throw new ApiError(400, "Cần cung cấp thông tin bệnh nhân (số điện thoại)");
+    }
+
+    const appointment = await appointmentRepository.createAppointment({
+        bookable_slot_id: data.bookable_slot_id,
+        patient_id: patientId,
+        reason_for_visit: data.reason_for_visit || "Khám tổng quát",
+        price: data.price || 0,
+        payment_method: data.payment_method || "offline",
+        status: "pending",
+        payment_status: "pending"
+    });
 
     await slotRepository.updateSlotStatus(
         data.bookable_slot_id,
@@ -80,13 +106,13 @@ const createAppointment = async (data) => {
     // tạo thông báo
     await notificationService.createNotification(
         slot.doctor_id,
-        data.patient_id,
+        patientId,
         "Lịch hẹn mới",
         "Có bệnh nhân vừa đặt lịch khám"
     );
 
     const doctor = await doctorRepository.findDoctorById(slot.doctor_id);
-    const patient = await patientRepository.findPatientById(data.patient_id);
+    const patient = await patientRepository.findPatientById(patientId);
 
     // HTML email
     const htmlContent = `
@@ -229,11 +255,21 @@ const updateAppointmentStatus = async (appointmentId, newStatus, doctorId) => {
     return updatedAppointment;
 };
 
+// Tra cứu lịch hẹn theo appointment_code (công khai, không cần đăng nhập)
+const getAppointmentByCode = async (appointmentCode) => {
+    const appointment = await appointmentRepository.findByAppointmentCode(appointmentCode);
+    if (!appointment) {
+        throw new ApiError(404, `Không tìm thấy lịch hẹn với mã: ${appointmentCode}`);
+    }
+    return appointment;
+};
+
 module.exports = {
     getAppointmentsByDoctorId,
     getAppointmentDetail,
     getAppointmentsByStatus,
     getAppointmentsByDate,
     createAppointment,
-    updateAppointmentStatus
+    updateAppointmentStatus,
+    getAppointmentByCode
 };

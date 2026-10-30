@@ -127,11 +127,30 @@ const updateAppointmentStatus = async (appointmentId, status) => {
     return appointment;
 };
 
+// Tìm lịch hẹn theo appointment_code (tra cứu công khai)
+const findByAppointmentCode = async (appointmentCode) => {
+    return await Appointment.findOne({
+        where: { appointment_code: appointmentCode },
+        attributes: ["id", "appointment_code", "status", "reason_for_visit", "price", "payment_method", "payment_status"],
+        include: [
+            {
+                model: BookableSlot,
+                attributes: ["slot_date", "start_time", "end_time"]
+            },
+            {
+                model: Patient,
+                attributes: ["id", "full_name", "phone_number"]
+            }
+        ]
+    });
+};
+
 module.exports = {
     getAppointmentsByDoctorId,
     getAppointmentDetail,
     getAppointmentsByStatus,
     getAppointmentsByDate,
     createAppointment,
-    updateAppointmentStatus
+    updateAppointmentStatus,
+    findByAppointmentCode
 };

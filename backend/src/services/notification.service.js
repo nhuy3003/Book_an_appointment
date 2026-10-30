@@ -11,18 +11,30 @@ const createNotification = async(doctorId, patientId, title, message) => {
     });
 };
 
-// Lấy thông báo của bác sĩ
+// Lấy thông báo của bác sĩ (trả về [] nếu không có, không throw lỗi)
 const getNotificationsByDoctorId = async(doctorId) => {
     const notifications = await notificationRepository.getNotificationsByDoctorId(doctorId);
+    return notifications || [];
+};
 
-    if(!notifications || notifications.length === 0){
-        throw new ApiError(404, "Không có thông báo");
+// Đánh dấu 1 thông báo đã đọc
+const markAsRead = async(notificationId, doctorId) => {
+    const notification = await notificationRepository.markAsRead(notificationId, doctorId);
+    if (!notification) {
+        throw new ApiError(404, "Không tìm thấy thông báo");
     }
+    return notification;
+};
 
-    return notifications;
-}
+// Đánh dấu tất cả thông báo đã đọc
+const markAllAsRead = async(doctorId) => {
+    const count = await notificationRepository.markAllAsRead(doctorId);
+    return count;
+};
 
 module.exports = {
     createNotification,
-    getNotificationsByDoctorId
+    getNotificationsByDoctorId,
+    markAsRead,
+    markAllAsRead
 }

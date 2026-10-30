@@ -100,7 +100,57 @@ const deleteSlotsByAvailability = async (availability_id) => {
     });
 };
 
+// Lấy slot trong khoảng ngày (có thể lọc theo bác sĩ / trạng thái / danh sách bác sĩ)
+const findSlotsInRange = async ({ doctorId = null, doctorIds = null, from, to, status = null }) => {
+    const where = { slot_date: { [Op.between]: [from, to] } };
+    if (doctorId) where.doctor_id = doctorId;
+    if (doctorIds) where.doctor_id = { [Op.in]: doctorIds };
+    if (status) where.status = status;
+    const rows = await BookableSlot.findAll({
+        where,
+        attributes: ["id", "doctor_id", "availability_id", "slot_date", "start_time", "end_time", "status"],
+        order: [["slot_date", "ASC"], ["start_time", "ASC"]],
+        raw: true
+    });
+    // Chuẩn hóa slot_date về chuỗi YYYY-MM-DD (phòng khi driver trả về Date object)
+    return rows.map(r => {
+        if (r.slot_date instanceof Date) {
+            const d = r.slot_date;
+            r.slot_date = `${d.getFullYear()}-${String(d.getMonth() + 1).padStart(2, "0")}-${String(d.getDate()).padStart(2, "0")}`;
+        }
+        return r;
+    });
+};
+
+// Đổi trạng thái tất cả slot (không phải booked) của bác sĩ trong một ngày
+const updateUnbookedSlotsByDate = async (doctor_id, slot_date, status) => {
+    return await BookableSlot.update(
+        { status },
+        { where: { doctor_id, slot_date, status: { [Op.ne]: "booked" } } }
+    );
+};
+
+// Xóa các slot chưa được đặt (available/off) của một availability từ ngày fromDate trở đi
+const deleteUnbookedSlotsByAvailabilityFrom = async (availability_id, fromDate) => {
+    return await BookableSlot.destroy({
+        where: {
+            availability_id,
+            slot_date: { [Op.gte]: fromDate },
+            status: { [Op.ne]: "booked" }
+        }
+    });
+};
+
+// Đếm số slot đã được đặt của một availability
+const countBookedByAvailability = async (availability_id) => {
+    return await BookableSlot.count({ where: { availability_id, status: "booked" } });
+};
+
 module.exports = {
+    findSlotsInRange,
+    updateUnbookedSlotsByDate,
+    deleteUnbookedSlotsByAvailabilityFrom,
+    countBookedByAvailability,
     findSlotById,
     findSlotsByDoctor,
     findAvailableSlotsByDoctorAndDate,

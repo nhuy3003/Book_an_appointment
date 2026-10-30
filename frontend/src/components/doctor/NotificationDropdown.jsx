@@ -14,9 +14,12 @@ export default function NotificationDropdown() {
     try {
       setLoading(true);
       const res = await notificationApi.getMyNotifications();
-      const data = res.data || res || {};
-      setNotifications(data.notifications || []);
-      setUnreadCount(data.unreadCount || 0);
+      // Backend trả về: { success, data: [...notifications], message }
+      // axiosClient interceptor trả về res.data nên res chính là { success, data, message }
+      const list = res?.data || res || [];
+      const arr = Array.isArray(list) ? list : [];
+      setNotifications(arr);
+      setUnreadCount(arr.filter(n => !n.is_read).length);
     } catch (err) {
       console.warn('Lỗi khi tải thông báo:', err);
     } finally {

@@ -10,6 +10,134 @@ const authMiddleware = require("../middlewares/auth.middleware");
  *     description: Quản lý lịch làm việc của bác sĩ
  */
 
+// ===== CÁC ROUTE TĨNH (đặt trước /:id) =====
+
+/**
+ * @swagger
+ * /api/doctor-availability/me/templates:
+ *   get:
+ *     summary: Lấy tất cả mẫu lịch hàng tuần (kể cả đang tắt) của bác sĩ đang đăng nhập
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ */
+router.get("/me/templates", authMiddleware, doctorController.getMyTemplates);
+
+/**
+ * @swagger
+ * /api/doctor-availability/me/slots:
+ *   get:
+ *     summary: Lấy các khung giờ (bookable_slot) theo khoảng ngày của bác sĩ đang đăng nhập
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: from
+ *         required: true
+ *         schema: { type: string, example: "2026-11-02" }
+ *       - in: query
+ *         name: to
+ *         required: true
+ *         schema: { type: string, example: "2026-11-08" }
+ */
+router.get("/me/slots", authMiddleware, doctorController.getMySlots);
+
+/**
+ * @swagger
+ * /api/doctor-availability/bulk:
+ *   post:
+ *     summary: Tạo nhiều ca cùng lúc (nhiều thứ x nhiều khung giờ) và tự sinh slot cho N tuần tới
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               days:
+ *                 type: array
+ *                 items: { type: string }
+ *                 example: ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday"]
+ *               shifts:
+ *                 type: array
+ *                 items:
+ *                   type: object
+ *                   properties:
+ *                     start_time: { type: string, example: "08:00" }
+ *                     end_time: { type: string, example: "11:30" }
+ *               slot_duration_minutes: { type: integer, example: 30 }
+ *               weeks: { type: integer, example: 4 }
+ */
+router.post("/bulk", authMiddleware, doctorController.bulkCreateSchedules);
+
+/**
+ * @swagger
+ * /api/doctor-availability/generate-slots:
+ *   post:
+ *     summary: Sinh khung giờ khám cho khoảng ngày cụ thể từ các mẫu lịch đang bật (bỏ qua slot đã có)
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               from: { type: string, example: "2026-11-01" }
+ *               to: { type: string, example: "2026-11-30" }
+ */
+router.post("/generate-slots", authMiddleware, doctorController.generateSlots);
+
+/**
+ * @swagger
+ * /api/doctor-availability/day-off:
+ *   patch:
+ *     summary: Nghỉ cả ngày (off=true) hoặc mở lại ngày (off=false). Slot đã đặt giữ nguyên.
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               date: { type: string, example: "2026-11-05" }
+ *               off: { type: boolean, example: true }
+ */
+router.patch("/day-off", authMiddleware, doctorController.setDayOff);
+
+/**
+ * @swagger
+ * /api/doctor-availability/slots/{slotId}/status:
+ *   patch:
+ *     summary: Bật/tắt 1 khung giờ (available | off)
+ *     tags: [Doctor Availability]
+ *     security:
+ *       - bearerAuth: []
+ *     parameters:
+ *       - in: path
+ *         name: slotId
+ *         required: true
+ *         schema: { type: integer }
+ *     requestBody:
+ *       required: true
+ *       content:
+ *         application/json:
+ *           schema:
+ *             type: object
+ *             properties:
+ *               status: { type: string, enum: [available, off] }
+ */
+router.patch("/slots/:slotId/status", authMiddleware, doctorController.setSlotStatus);
+
 /**
  * @swagger
  * /api/doctor-availability/{id}:
