@@ -18,6 +18,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
     patient_name: '',
     patient_phone: '',
     patient_email: '',
+    patient_address: '',
     reason_for_visit: '',
     payment_method: 'offline',
   });
@@ -30,7 +31,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
       setSuccess(null);
       setError(null);
       setAvailableDates([]);
-      setForm({ patient_name: '', patient_phone: '', patient_email: '', reason_for_visit: '', payment_method: 'offline' });
+      setForm({ patient_name: '', patient_phone: '', patient_email: '', patient_address: '', reason_for_visit: '', payment_method: 'offline' });
       return;
     }
 
@@ -88,6 +89,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
         patient_name: form.patient_name,
         phone_number: form.patient_phone,
         email: form.patient_email,
+        address: form.patient_address,
         reason_for_visit: form.reason_for_visit || 'Khám tổng quát',
         price: doctor.price_per_appointment || 0,
         payment_method: form.payment_method,
@@ -240,6 +242,16 @@ function BookingModal({ doctor, isOpen, onClose }) {
                       value={form.patient_email}
                       onChange={(e) => setForm((f) => ({ ...f, patient_email: e.target.value }))}
                       placeholder="email@example.com"
+                      className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
+                    />
+                  </div>
+                  <div>
+                    <label className="block text-xs text-slate-600 mb-1">Địa chỉ</label>
+                    <input
+                      type="text"
+                      value={form.patient_address}
+                      onChange={(e) => setForm((f) => ({ ...f, patient_address: e.target.value }))}
+                      placeholder="Số nhà, đường, phường/xã..."
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                     />
                   </div>

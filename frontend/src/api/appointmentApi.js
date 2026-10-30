@@ -26,6 +26,10 @@ const appointmentApi = {
     return axiosClient.get(`/appointments/code/${code}`);
   },
 
+  getDetail: (id) => {
+    return axiosClient.get(`/appointments/${id}`);
+  },
+
   // Đặt lịch hẹn mới (không cần đăng nhập - dành cho bệnh nhân)
   // Backend: POST /api/appointments/create
   createAppointment: (data) => {

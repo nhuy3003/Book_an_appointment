@@ -43,6 +43,18 @@ export default function DoctorAppointmentsPage() {
     fetchAppointments();
   };
 
+  const openAppointmentDetail = async (item) => {
+    setSelectedAppointment(item);
+    setIsModalOpen(true);
+    try {
+      const res = await appointmentApi.getDetail(item.id);
+      const detail = res?.data || res;
+      if (detail) setSelectedAppointment(detail);
+    } catch {
+      // Giữ dữ liệu danh sách nếu không tải được chi tiết
+    }
+  };
+
   // Nút duyệt nhanh ca hẹn
   const handleQuickConfirm = async (id, e) => {
     e.stopPropagation();
@@ -159,10 +171,7 @@ export default function DoctorAppointmentsPage() {
                   return (
                     <tr
                       key={item.id}
-                      onClick={() => {
-                        setSelectedAppointment(item);
-                        setIsModalOpen(true);
-                      }}
+                      onClick={() => openAppointmentDetail(item)}
                       className="hover:bg-slate-50/80 cursor-pointer transition"
                     >
                       {/* Mã Hẹn */}
@@ -232,8 +241,7 @@ export default function DoctorAppointmentsPage() {
                         <button
                           onClick={(e) => {
                             e.stopPropagation();
-                            setSelectedAppointment(item);
-                            setIsModalOpen(true);
+                            openAppointmentDetail(item);
                           }}
                           className="text-primary-600 hover:text-primary-800 font-medium px-2 py-1 rounded hover:bg-primary-50"
                         >

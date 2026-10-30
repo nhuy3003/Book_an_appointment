@@ -106,6 +106,29 @@ export default function BookingLookupPage() {
                   {result.Patient.phone_number && (
                     <p className="text-xs text-slate-500">{result.Patient.phone_number}</p>
                   )}
+                  {result.Patient.address && (
+                    <p className="text-xs text-slate-500">{result.Patient.address}</p>
+                  )}
+                </div>
+              </div>
+            )}
+
+            {/* Bác sĩ */}
+            {result.BookableSlot?.Doctor && (
+              <div className="flex items-start gap-3">
+                <div className="w-8 h-8 bg-indigo-100 rounded-lg flex items-center justify-center flex-shrink-0">
+                  <svg className="w-4 h-4 text-indigo-600" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M16 7a4 4 0 11-8 0 4 4 0 018 0zM12 14a7 7 0 00-7 7h14a7 7 0 00-7-7z" />
+                  </svg>
+                </div>
+                <div>
+                  <p className="text-xs text-slate-500 font-medium">Bác sĩ khám</p>
+                  <p className="text-sm font-semibold text-slate-800">{result.BookableSlot.Doctor.full_name}</p>
+                  {(result.BookableSlot.Doctor.Specialty?.specialty_name || result.BookableSlot.Doctor.specialty) && (
+                    <p className="text-xs text-slate-500">
+                      {result.BookableSlot.Doctor.Specialty?.specialty_name || result.BookableSlot.Doctor.specialty}
+                    </p>
+                  )}
                 </div>
               </div>
             )}

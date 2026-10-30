@@ -82,6 +82,14 @@ const createAppointment = async (data) => {
                 address: data.address || "",
                 password: ""
             });
+        } else {
+            await patientRepository.updatePatient(patient.id, {
+                full_name: data.patient_name || patient.full_name,
+                email: data.email || patient.email || "",
+                address: data.address || patient.address || "",
+                phone_number: data.phone_number
+            });
+            patient = await patientRepository.findPatientById(patient.id);
         }
         patientId = patient.id;
     }

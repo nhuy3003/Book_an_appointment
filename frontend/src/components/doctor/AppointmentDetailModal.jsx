@@ -1,4 +1,4 @@
-import React, { useState } from 'react';
+import React, { useState, useEffect } from 'react';
 import { formatCurrency, formatDate, getAppointmentStatusBadge } from '../../utils/formatters';
 
 export default function AppointmentDetailModal({ isOpen, onClose, appointment, onUpdateStatus }) {
@@ -6,6 +6,14 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointment, o
   const [note, setNote] = useState(appointment?.note || '');
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
+
+  useEffect(() => {
+    if (appointment) {
+      setStatus(appointment.status || 'pending');
+      setNote(appointment.note || '');
+      setError(null);
+    }
+  }, [appointment]);
 
   if (!isOpen || !appointment) return null;
 
@@ -68,6 +76,10 @@ export default function AppointmentDetailModal({ isOpen, onClose, appointment, o
             <p>
               <strong className="text-slate-700">Email:</strong>{' '}
               {appointment.Patient?.email || 'Chưa cung cấp'}
+            </p>
+            <p>
+              <strong className="text-slate-700">Địa chỉ:</strong>{' '}
+              {appointment.Patient?.address || 'Chưa cung cấp'}
             </p>
             <p>
               <strong className="text-slate-700">Lý do khám:</strong>{' '}
