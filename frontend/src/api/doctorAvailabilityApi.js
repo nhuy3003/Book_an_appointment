@@ -1,32 +1,50 @@
 import axiosClient from './axiosClient';
 
 const doctorAvailabilityApi = {
-  // Lấy lịch làm việc của bác sĩ theo doctorId
   getByDoctorId: (doctorId) => {
     return axiosClient.get(`/doctor-availability/${doctorId}`);
   },
 
-  // Lấy lịch làm việc theo thứ/ngày cụ thể
   getByDay: (doctorId, day) => {
     return axiosClient.get(`/doctor-availability/${doctorId}/day/${day}`);
   },
 
-  // Tạo mới ca làm việc (Cần token)
+  getMyTemplates: () => {
+    return axiosClient.get('/doctor-availability/me/templates');
+  },
+
+  getMySlots: (from, to) => {
+    return axiosClient.get('/doctor-availability/me/slots', { params: { from, to } });
+  },
+
+  bulkCreate: (data) => {
+    return axiosClient.post('/doctor-availability/bulk', data);
+  },
+
+  generateSlots: (from, to) => {
+    return axiosClient.post('/doctor-availability/generate-slots', { from, to });
+  },
+
+  setDayOff: (date, off) => {
+    return axiosClient.patch('/doctor-availability/day-off', { date, off });
+  },
+
+  setSlotStatus: (slotId, status) => {
+    return axiosClient.patch(`/doctor-availability/slots/${slotId}/status`, { status });
+  },
+
   create: (data) => {
     return axiosClient.post('/doctor-availability', data);
   },
 
-  // Cập nhật ca làm việc theo ID (Cần token)
   update: (idCalendar, data) => {
     return axiosClient.put(`/doctor-availability/${idCalendar}`, data);
   },
 
-  // Xóa ca làm việc theo ID (Cần token)
   delete: (idCalendar) => {
     return axiosClient.delete(`/doctor-availability/${idCalendar}`);
   },
 
-  // Bật/tắt hoặc vô hiệu hóa ca làm việc (Cần token)
   disable: (idCalendar) => {
     return axiosClient.patch(`/doctor-availability/${idCalendar}/disable`);
   },

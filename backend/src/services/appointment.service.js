@@ -78,7 +78,9 @@ const createAppointment = async (data) => {
             patient = await patientRepository.createPatient({
                 full_name: data.patient_name || "Bệnh nhân",
                 phone_number: data.phone_number,
-                email: data.email || null,
+                email: data.email || "",
+                address: data.address || "",
+                password: ""
             });
         }
         patientId = patient.id;
@@ -92,8 +94,9 @@ const createAppointment = async (data) => {
         bookable_slot_id: data.bookable_slot_id,
         patient_id: patientId,
         reason_for_visit: data.reason_for_visit || "Khám tổng quát",
+        note: data.note || "",
         price: data.price || 0,
-        payment_method: data.payment_method || "offline",
+        payment_method: data.payment_method === "online" ? "online" : "offline",
         status: "pending",
         payment_status: "pending"
     });
@@ -103,13 +106,16 @@ const createAppointment = async (data) => {
         "booked"
     );
 
-    // tạo thông báo
-    await notificationService.createNotification(
-        slot.doctor_id,
-        patientId,
-        "Lịch hẹn mới",
-        "Có bệnh nhân vừa đặt lịch khám"
-    );
+    try {
+        await notificationService.createNotification(
+            slot.doctor_id,
+            patientId,
+            "Lịch hẹn mới",
+            "Có bệnh nhân vừa đặt lịch khám"
+        );
+    } catch (err) {
+        console.error("Không tạo được thông báo lịch hẹn:", err.message);
+    }
 
     const doctor = await doctorRepository.findDoctorById(slot.doctor_id);
     const patient = await patientRepository.findPatientById(patientId);
@@ -160,12 +166,17 @@ const createAppointment = async (data) => {
     </div>
     `;
 
-    // gửi mail
-    await sendMail(
-        doctor.email,
-        "Bạn có lịch hẹn khám mới",
-        htmlContent
-    );
+    try {
+        if (doctor?.email) {
+            await sendMail(
+                doctor.email,
+                "Bạn có lịch hẹn khám mới",
+                htmlContent
+            );
+        }
+    } catch (err) {
+        console.error("Gửi mail lịch hẹn thất bại:", err.message);
+    }
 
     return appointment;
 };

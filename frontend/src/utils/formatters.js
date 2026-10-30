@@ -4,11 +4,28 @@ export const formatCurrency = (amount) => {
   return new Intl.NumberFormat('vi-VN', { style: 'currency', currency: 'VND' }).format(amount);
 };
 
-// Định dạng ngày: YYYY-MM-DD -> DD/MM/YYYY
+// Định dạng ngày: YYYY-MM-DD -> DD/MM/YYYY (không lệch múi giờ)
 export const formatDate = (dateString) => {
   if (!dateString) return '';
-  const date = new Date(dateString);
-  return date.toLocaleDateString('vi-VN');
+  const s = String(dateString).slice(0, 10);
+  const m = s.match(/^(\d{4})-(\d{2})-(\d{2})$/);
+  if (m) return `${m[3]}/${m[2]}/${m[1]}`;
+  return new Date(dateString).toLocaleDateString('vi-VN');
+};
+
+export const formatTime = (timeString) => {
+  if (!timeString) return '';
+  return String(timeString).slice(0, 5);
+};
+
+export const WEEKDAY_LABELS = {
+  Monday: 'Thứ Hai',
+  Tuesday: 'Thứ Ba',
+  Wednesday: 'Thứ Tư',
+  Thursday: 'Thứ Năm',
+  Friday: 'Thứ Sáu',
+  Saturday: 'Thứ Bảy',
+  Sunday: 'Chủ Nhật',
 };
 
 // Badge màu cho các trạng thái Appointment trong database

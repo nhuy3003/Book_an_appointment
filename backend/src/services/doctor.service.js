@@ -4,7 +4,7 @@ const specialtyRepository = require("../repositories/specialty.repository");
 const ApiError = require("../utils/ApiError");
 const { todayStr, nowTimeStr, addDays, isValidDateStr, diffDays } = require("../utils/dateHelper");
 
-const AVAILABILITY_WINDOW_DAYS = 14; // so ngay toi hien thi lich trong cho benh nhan
+const AVAILABILITY_WINDOW_DAYS = 28; // so ngay toi hien thi lich trong cho benh nhan
 
 const getDoctorById = async (doctorId) => {
 

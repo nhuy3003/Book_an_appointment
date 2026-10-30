@@ -1,10 +1,12 @@
 import React, { useState, useEffect } from 'react';
+import { useSearchParams } from 'react-router-dom';
 import doctorApi from '../../api/doctorApi';
 import appointmentApi from '../../api/appointmentApi';
-import { formatCurrency, formatDate } from '../../utils/formatters';
+import { formatCurrency, formatDate, formatTime } from '../../utils/formatters';
 
-// ===== MODAL ĐẶT LỊCH KHÁM =====
 function BookingModal({ doctor, isOpen, onClose }) {
+  const [availableDates, setAvailableDates] = useState([]);
+  const [loadingDates, setLoadingDates] = useState(false);
   const [selectedDate, setSelectedDate] = useState('');
   const [slots, setSlots] = useState([]);
   const [selectedSlot, setSelectedSlot] = useState(null);
@@ -20,55 +22,69 @@ function BookingModal({ doctor, isOpen, onClose }) {
     payment_method: 'offline',
   });
 
-  // Lấy ngày tối thiểu là ngày mai
-  const minDate = new Date();
-  minDate.setDate(minDate.getDate() + 1);
-  const minDateStr = minDate.toISOString().split('T')[0];
-
   useEffect(() => {
-    if (!isOpen) {
+    if (!isOpen || !doctor?.id) {
       setSelectedDate('');
       setSlots([]);
       setSelectedSlot(null);
       setSuccess(null);
       setError(null);
-      setForm({ patient_name: '', patient_phone: '', patient_email: '', reason_for_visit: '', payment_method: 'cash' });
+      setAvailableDates([]);
+      setForm({ patient_name: '', patient_phone: '', patient_email: '', reason_for_visit: '', payment_method: 'offline' });
+      return;
     }
-  }, [isOpen]);
 
-  const fetchSlots = async (date) => {
-    if (!doctor?.id || !date) return;
-    setLoadingSlots(true);
-    setSlots([]);
-    setSelectedSlot(null);
-    try {
-      const res = await doctorApi.getAvailableSlots(doctor.id, date);
-      const data = res?.data || res || [];
-      setSlots(Array.isArray(data) ? data : []);
-    } catch {
+    const loadDates = async () => {
+      setLoadingDates(true);
+      try {
+        const res = await doctorApi.getAvailableDates(doctor.id);
+        const data = res?.data || res || [];
+        const dates = Array.isArray(data) ? data : [];
+        setAvailableDates(dates);
+        if (dates.length > 0) {
+          setSelectedDate(dates[0].date);
+        }
+      } catch {
+        setAvailableDates([]);
+      } finally {
+        setLoadingDates(false);
+      }
+    };
+    loadDates();
+  }, [isOpen, doctor?.id]);
+
+  useEffect(() => {
+    if (!isOpen || !doctor?.id || !selectedDate) return;
+    const fetchSlots = async () => {
+      setLoadingSlots(true);
       setSlots([]);
-    } finally {
-      setLoadingSlots(false);
-    }
-  };
-
-  const handleDateChange = (e) => {
-    const date = e.target.value;
-    setSelectedDate(date);
-    fetchSlots(date);
-  };
+      setSelectedSlot(null);
+      try {
+        const res = await doctorApi.getAvailableSlots(doctor.id, selectedDate);
+        const data = res?.data || res || [];
+        setSlots(Array.isArray(data) ? data : []);
+      } catch {
+        setSlots([]);
+      } finally {
+        setLoadingSlots(false);
+      }
+    };
+    fetchSlots();
+  }, [isOpen, doctor?.id, selectedDate]);
 
   const handleSubmit = async (e) => {
     e.preventDefault();
     if (!selectedSlot) { setError('Vui lòng chọn khung giờ khám'); return; }
-    if (!form.patient_name.trim() || !form.patient_phone.trim()) { setError('Vui lòng nhập đầy đủ họ tên và số điện thoại'); return; }
+    if (!form.patient_name.trim() || !form.patient_phone.trim()) {
+      setError('Vui lòng nhập đầy đủ họ tên và số điện thoại');
+      return;
+    }
 
     setSubmitting(true);
     setError(null);
     try {
       const payload = {
         bookable_slot_id: selectedSlot.id,
-        patient_id: null, // Bệnh nhân vãng lai - backend sẽ tạo mới nếu cần
         patient_name: form.patient_name,
         phone_number: form.patient_phone,
         email: form.patient_email,
@@ -91,7 +107,6 @@ function BookingModal({ doctor, isOpen, onClose }) {
   return (
     <div className="fixed inset-0 bg-black/50 backdrop-blur-sm z-50 flex items-center justify-center p-4">
       <div className="bg-white rounded-2xl shadow-2xl w-full max-w-lg max-h-[90vh] overflow-y-auto">
-        {/* Header */}
         <div className="p-6 border-b border-slate-100 flex justify-between items-start">
           <div>
             <h2 className="text-lg font-bold text-slate-800">Đặt Lịch Khám</h2>
@@ -104,7 +119,6 @@ function BookingModal({ doctor, isOpen, onClose }) {
         </div>
 
         <div className="p-6">
-          {/* Thành công */}
           {success ? (
             <div className="text-center py-6">
               <div className="w-16 h-16 bg-emerald-100 rounded-full flex items-center justify-center mx-auto mb-4">
@@ -117,7 +131,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
               <div className="bg-primary-50 border border-primary-200 text-primary-700 font-mono font-bold text-lg px-4 py-2 rounded-xl inline-block mb-4">
                 {success}
               </div>
-              <p className="text-xs text-slate-400">Vui lòng lưu mã này để tra cứu lịch hẹn</p>
+              <p className="text-xs text-slate-400">Lưu mã này để tra cứu tại mục Tra cứu lịch hẹn. Không cần đăng nhập.</p>
               <button
                 onClick={onClose}
                 className="mt-5 w-full bg-primary-600 text-white py-2.5 rounded-xl font-semibold text-sm"
@@ -131,31 +145,47 @@ function BookingModal({ doctor, isOpen, onClose }) {
                 <div className="p-3 bg-rose-50 border border-rose-200 text-rose-700 text-xs rounded-xl">{error}</div>
               )}
 
-              {/* Chọn ngày */}
               <div>
-                <label className="block text-xs font-semibold text-slate-700 uppercase mb-1">Ngày Khám *</label>
-                <input
-                  type="date"
-                  value={selectedDate}
-                  min={minDateStr}
-                  onChange={handleDateChange}
-                  className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
-                  required
-                />
+                <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">
+                  Ngày còn lịch trống *
+                </label>
+                {loadingDates ? (
+                  <p className="text-xs text-slate-400 py-3">Đang tải ngày khám...</p>
+                ) : availableDates.length === 0 ? (
+                  <div className="text-center text-xs text-slate-500 py-4 bg-slate-50 rounded-lg">
+                    Bác sĩ chưa mở lịch khám trong thời gian tới. Vui lòng chọn bác sĩ khác.
+                  </div>
+                ) : (
+                  <div className="grid grid-cols-3 sm:grid-cols-4 gap-2 max-h-40 overflow-y-auto pr-1">
+                    {availableDates.map((item) => (
+                      <button
+                        key={item.date}
+                        type="button"
+                        onClick={() => setSelectedDate(item.date)}
+                        className={`text-[11px] py-2 px-1 rounded-lg border font-medium transition ${
+                          selectedDate === item.date
+                            ? 'bg-primary-600 text-white border-primary-600'
+                            : 'bg-white text-slate-700 border-slate-200 hover:border-primary-400'
+                        }`}
+                      >
+                        <span className="block font-semibold">{formatDate(item.date)}</span>
+                        <span className={selectedDate === item.date ? 'text-primary-100' : 'text-slate-400'}>
+                          {item.available} ca
+                        </span>
+                      </button>
+                    ))}
+                  </div>
+                )}
               </div>
 
-              {/* Chọn giờ */}
               {selectedDate && (
                 <div>
-                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Khung Giờ Khám *</label>
+                  <label className="block text-xs font-semibold text-slate-700 uppercase mb-2">Khung giờ khám *</label>
                   {loadingSlots ? (
-                    <div className="text-center text-xs text-slate-400 py-3 flex items-center justify-center gap-2">
-                      <div className="w-4 h-4 border-2 border-primary-500 border-t-transparent rounded-full animate-spin" />
-                      Đang tải lịch trống...
-                    </div>
+                    <div className="text-center text-xs text-slate-400 py-3">Đang tải khung giờ...</div>
                   ) : slots.length === 0 ? (
                     <div className="text-center text-xs text-slate-500 py-4 bg-slate-50 rounded-lg">
-                      Không có lịch trống cho ngày này. Vui lòng chọn ngày khác.
+                      Không còn khung giờ trống ngày này.
                     </div>
                   ) : (
                     <div className="grid grid-cols-3 gap-2">
@@ -170,7 +200,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
                               : 'bg-white text-slate-700 border-slate-200 hover:border-primary-400 hover:bg-primary-50'
                           }`}
                         >
-                          {slot.start_time?.slice(0, 5)} - {slot.end_time?.slice(0, 5)}
+                          {formatTime(slot.start_time)} - {formatTime(slot.end_time)}
                         </button>
                       ))}
                     </div>
@@ -178,16 +208,15 @@ function BookingModal({ doctor, isOpen, onClose }) {
                 </div>
               )}
 
-              {/* Thông tin bệnh nhân */}
               <div className="pt-2 border-t border-slate-100">
-                <p className="text-xs font-semibold text-slate-700 uppercase mb-3">Thông Tin Bệnh Nhân</p>
+                <p className="text-xs font-semibold text-slate-700 uppercase mb-3">Thông tin bệnh nhân</p>
                 <div className="space-y-3">
                   <div>
                     <label className="block text-xs text-slate-600 mb-1">Họ và tên *</label>
                     <input
                       type="text"
                       value={form.patient_name}
-                      onChange={e => setForm(f => ({ ...f, patient_name: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, patient_name: e.target.value }))}
                       placeholder="Nguyễn Văn A"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                       required
@@ -198,7 +227,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
                     <input
                       type="tel"
                       value={form.patient_phone}
-                      onChange={e => setForm(f => ({ ...f, patient_phone: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, patient_phone: e.target.value }))}
                       placeholder="0901234567"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                       required
@@ -209,7 +238,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
                     <input
                       type="email"
                       value={form.patient_email}
-                      onChange={e => setForm(f => ({ ...f, patient_email: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, patient_email: e.target.value }))}
                       placeholder="email@example.com"
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                     />
@@ -218,7 +247,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
                     <label className="block text-xs text-slate-600 mb-1">Lý do khám</label>
                     <textarea
                       value={form.reason_for_visit}
-                      onChange={e => setForm(f => ({ ...f, reason_for_visit: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, reason_for_visit: e.target.value }))}
                       placeholder="Mô tả triệu chứng hoặc lý do khám..."
                       rows={2}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500 resize-none"
@@ -228,7 +257,7 @@ function BookingModal({ doctor, isOpen, onClose }) {
                     <label className="block text-xs text-slate-600 mb-1">Phương thức thanh toán</label>
                     <select
                       value={form.payment_method}
-                      onChange={e => setForm(f => ({ ...f, payment_method: e.target.value }))}
+                      onChange={(e) => setForm((f) => ({ ...f, payment_method: e.target.value }))}
                       className="w-full border border-slate-300 rounded-lg px-3 py-2 text-sm focus:outline-none focus:border-primary-500"
                     >
                       <option value="offline">Tiền mặt tại phòng khám</option>
@@ -238,12 +267,11 @@ function BookingModal({ doctor, isOpen, onClose }) {
                 </div>
               </div>
 
-              {/* Tóm tắt */}
               {selectedSlot && (
                 <div className="bg-primary-50 border border-primary-100 rounded-xl p-3 text-xs">
                   <p className="font-semibold text-primary-700 mb-1">Tóm tắt lịch hẹn</p>
                   <div className="text-slate-600 space-y-0.5">
-                    <p>📅 {formatDate(selectedDate)} &nbsp;⏰ {selectedSlot.start_time?.slice(0, 5)} - {selectedSlot.end_time?.slice(0, 5)}</p>
+                    <p>📅 {formatDate(selectedDate)} &nbsp;⏰ {formatTime(selectedSlot.start_time)} - {formatTime(selectedSlot.end_time)}</p>
                     <p>👨‍⚕️ {doctor?.full_name}</p>
                     <p>💰 Chi phí: <span className="font-semibold text-primary-700">{formatCurrency(doctor?.price_per_appointment)}</span></p>
                   </div>
@@ -253,11 +281,9 @@ function BookingModal({ doctor, isOpen, onClose }) {
               <button
                 type="submit"
                 disabled={submitting || !selectedSlot}
-                className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition flex items-center justify-center gap-2"
+                className="w-full bg-primary-600 hover:bg-primary-700 disabled:opacity-60 text-white font-semibold py-2.5 rounded-xl text-sm transition"
               >
-                {submitting ? (
-                  <><div className="w-4 h-4 border-2 border-white border-t-transparent rounded-full animate-spin" /> Đang đặt lịch...</>
-                ) : 'Xác Nhận Đặt Lịch'}
+                {submitting ? 'Đang đặt lịch...' : 'Xác nhận đặt lịch'}
               </button>
             </form>
           )}
@@ -267,11 +293,9 @@ function BookingModal({ doctor, isOpen, onClose }) {
   );
 }
 
-// ===== CARD BÁC SĨ =====
 function DoctorCard({ doctor, onBook }) {
   return (
     <div className="bg-white border border-slate-200/80 rounded-2xl overflow-hidden hover:shadow-lg hover:border-primary-200 transition-all duration-200 flex flex-col">
-      {/* Avatar */}
       <div className="bg-gradient-to-br from-primary-50 to-blue-100 h-36 flex items-center justify-center relative overflow-hidden">
         {doctor.image_url ? (
           <img src={doctor.image_url} alt={doctor.full_name} className="w-full h-full object-cover" />
@@ -282,7 +306,6 @@ function DoctorCard({ doctor, onBook }) {
             </svg>
           </div>
         )}
-        {/* Badge chuyên khoa */}
         {doctor.specialty && (
           <span className="absolute top-3 right-3 bg-white/90 text-primary-700 text-[10px] font-bold px-2.5 py-1 rounded-full shadow-sm">
             {doctor.specialty}
@@ -290,63 +313,80 @@ function DoctorCard({ doctor, onBook }) {
         )}
       </div>
 
-      {/* Nội dung */}
       <div className="p-4 flex flex-col flex-1">
         <h3 className="font-bold text-slate-800 text-sm leading-tight">{doctor.full_name}</h3>
         {doctor.experience_years > 0 && (
-          <p className="text-xs text-slate-500 mt-1">
-            🏥 {doctor.experience_years} năm kinh nghiệm
-          </p>
+          <p className="text-xs text-slate-500 mt-1">🏥 {doctor.experience_years} năm kinh nghiệm</p>
         )}
         {doctor.bio && (
           <p className="text-xs text-slate-500 mt-2 line-clamp-2 flex-1">{doctor.bio}</p>
         )}
 
-        <div className="mt-3 pt-3 border-t border-slate-100 flex items-center justify-between">
-          <span className="text-sm font-bold text-primary-600">
-            {formatCurrency(doctor.price_per_appointment)}
-          </span>
-          <span className="text-[10px] text-slate-400">/ buổi khám</span>
+        <div className="mt-3 pt-3 border-t border-slate-100">
+          {doctor.next_available_date ? (
+            <p className="text-[11px] text-emerald-700 font-medium">
+              Lịch trống: {formatDate(doctor.next_available_date)} · {doctor.next_available_slots} ca
+            </p>
+          ) : (
+            <p className="text-[11px] text-slate-400">Chưa mở lịch khám</p>
+          )}
+          <div className="mt-1 flex items-center justify-between">
+            <span className="text-sm font-bold text-primary-600">
+              {formatCurrency(doctor.price_per_appointment)}
+            </span>
+            <span className="text-[10px] text-slate-400">/ buổi khám</span>
+          </div>
         </div>
 
         <button
           onClick={() => onBook(doctor)}
-          className="mt-3 w-full bg-primary-600 hover:bg-primary-700 text-white text-xs font-semibold py-2.5 rounded-xl transition shadow-sm hover:shadow-md"
+          disabled={!doctor.next_available_date}
+          className="mt-3 w-full bg-primary-600 hover:bg-primary-700 disabled:bg-slate-200 disabled:text-slate-400 text-white text-xs font-semibold py-2.5 rounded-xl transition"
         >
-          Đặt Lịch Khám
+          {doctor.next_available_date ? 'Đặt lịch khám' : 'Chưa có lịch'}
         </button>
       </div>
     </div>
   );
 }
 
-// ===== TRANG CHÍNH =====
 export default function DoctorListPage() {
+  const [searchParams] = useSearchParams();
   const [doctors, setDoctors] = useState([]);
   const [specialties, setSpecialties] = useState([]);
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
-  const [selectedSpecialty, setSelectedSpecialty] = useState(null);
+  const [selectedSpecialty, setSelectedSpecialty] = useState(
+    searchParams.get('specialty') ? Number(searchParams.get('specialty')) : null
+  );
+  const [filterDate, setFilterDate] = useState('');
   const [searchText, setSearchText] = useState('');
-
-  // Modal đặt lịch
   const [bookingDoctor, setBookingDoctor] = useState(null);
   const [isModalOpen, setIsModalOpen] = useState(false);
 
-  // Fetch dữ liệu
   useEffect(() => {
     const fetchData = async () => {
       setLoading(true);
       setError(null);
       try {
         const [docRes, specRes] = await Promise.all([
-          doctorApi.getAll(selectedSpecialty),
+          doctorApi.getAll(selectedSpecialty, filterDate || null),
           doctorApi.getSpecialties(),
         ]);
         const docData = docRes?.data || docRes || [];
         const specData = specRes?.data || specRes || [];
-        setDoctors(Array.isArray(docData) ? docData : []);
+        const list = Array.isArray(docData) ? docData : [];
+        setDoctors(list);
         setSpecialties(Array.isArray(specData) ? specData : []);
+
+        const doctorId = searchParams.get('doctor');
+        if (doctorId && !isModalOpen) {
+          const found = list.find((d) => String(d.id) === String(doctorId));
+          if (found?.next_available_date) {
+            setBookingDoctor(found);
+            setIsModalOpen(true);
+          }
+        }
       } catch (err) {
         setError(err?.message || 'Không thể tải danh sách bác sĩ');
       } finally {
@@ -354,28 +394,22 @@ export default function DoctorListPage() {
       }
     };
     fetchData();
-  }, [selectedSpecialty]);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [selectedSpecialty, filterDate]);
 
-  // Lọc theo từ khóa tìm kiếm
-  const filteredDoctors = doctors.filter(d =>
+  const filteredDoctors = doctors.filter((d) =>
     d.full_name?.toLowerCase().includes(searchText.toLowerCase()) ||
     d.specialty?.toLowerCase().includes(searchText.toLowerCase()) ||
     d.bio?.toLowerCase().includes(searchText.toLowerCase())
   );
 
-  const handleBook = (doctor) => {
-    setBookingDoctor(doctor);
-    setIsModalOpen(true);
-  };
-
   return (
     <div className="space-y-6">
-      {/* Header */}
       <div className="flex flex-col sm:flex-row justify-between items-start sm:items-center gap-4 bg-white p-6 rounded-2xl border border-slate-200">
         <div>
           <h1 className="text-xl font-bold text-slate-800">Danh Sách Bác Sĩ</h1>
           <p className="text-xs text-slate-500 mt-0.5">
-            Tìm kiếm bác sĩ phù hợp và đặt lịch khám ngay hôm nay
+            Chỉ hiện bác sĩ còn khung giờ trống. Chọn ngày bên dưới để lọc lịch thực tế.
           </p>
         </div>
         {!loading && (
@@ -385,9 +419,7 @@ export default function DoctorListPage() {
         )}
       </div>
 
-      {/* Thanh tìm kiếm + lọc chuyên khoa */}
       <div className="bg-white p-4 rounded-xl border border-slate-200 space-y-3">
-        {/* Search */}
         <div className="relative">
           <svg className="absolute left-3 top-1/2 -translate-y-1/2 w-4 h-4 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
             <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M21 21l-6-6m2-5a7 7 0 11-14 0 7 7 0 0114 0z" />
@@ -395,33 +427,44 @@ export default function DoctorListPage() {
           <input
             type="text"
             value={searchText}
-            onChange={e => setSearchText(e.target.value)}
+            onChange={(e) => setSearchText(e.target.value)}
             placeholder="Tìm bác sĩ theo tên, chuyên khoa..."
             className="w-full pl-9 pr-4 py-2 border border-slate-300 rounded-lg text-sm focus:outline-none focus:border-primary-500"
           />
         </div>
 
-        {/* Bộ lọc chuyên khoa */}
+        <div className="flex flex-wrap items-center gap-2">
+          <span className="text-xs font-semibold text-slate-600">Ngày khám:</span>
+          <input
+            type="date"
+            value={filterDate}
+            min={`${new Date().getFullYear()}-${String(new Date().getMonth() + 1).padStart(2, '0')}-${String(new Date().getDate()).padStart(2, '0')}`}
+            onChange={(e) => setFilterDate(e.target.value)}
+            className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs"
+          />
+          {filterDate && (
+            <button type="button" onClick={() => setFilterDate('')} className="text-xs text-slate-500 underline">
+              Xóa ngày
+            </button>
+          )}
+        </div>
+
         {specialties.length > 0 && (
           <div className="flex flex-wrap gap-2">
             <button
               onClick={() => setSelectedSpecialty(null)}
               className={`text-xs px-3 py-1.5 rounded-full font-medium transition ${
-                !selectedSpecialty
-                  ? 'bg-primary-600 text-white'
-                  : 'bg-slate-100 text-slate-600 hover:bg-primary-50 hover:text-primary-700'
+                !selectedSpecialty ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-primary-50'
               }`}
             >
               Tất cả
             </button>
-            {specialties.map(s => (
+            {specialties.map((s) => (
               <button
                 key={s.id}
                 onClick={() => setSelectedSpecialty(selectedSpecialty === s.id ? null : s.id)}
                 className={`text-xs px-3 py-1.5 rounded-full font-medium transition ${
-                  selectedSpecialty === s.id
-                    ? 'bg-primary-600 text-white'
-                    : 'bg-slate-100 text-slate-600 hover:bg-primary-50 hover:text-primary-700'
+                  selectedSpecialty === s.id ? 'bg-primary-600 text-white' : 'bg-slate-100 text-slate-600 hover:bg-primary-50'
                 }`}
               >
                 {s.specialty_name}
@@ -431,54 +474,43 @@ export default function DoctorListPage() {
         )}
       </div>
 
-      {/* Nội dung */}
       {error && (
         <div className="p-4 bg-rose-50 border border-rose-200 text-rose-700 text-sm rounded-xl">{error}</div>
       )}
 
       {loading ? (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {[1, 2, 3, 4, 5, 6, 7, 8].map(i => (
-            <div key={i} className="bg-white border border-slate-100 rounded-2xl overflow-hidden animate-pulse">
-              <div className="h-36 bg-slate-100" />
-              <div className="p-4 space-y-2">
-                <div className="h-4 bg-slate-100 rounded w-3/4" />
-                <div className="h-3 bg-slate-100 rounded w-1/2" />
-                <div className="h-3 bg-slate-100 rounded w-full" />
-                <div className="h-8 bg-slate-100 rounded mt-4" />
-              </div>
-            </div>
+          {[1, 2, 3, 4, 5, 6, 7, 8].map((i) => (
+            <div key={i} className="bg-white border border-slate-100 rounded-2xl overflow-hidden animate-pulse h-72" />
           ))}
         </div>
       ) : filteredDoctors.length === 0 ? (
         <div className="p-12 text-center bg-white border border-slate-200 rounded-2xl">
-          <div className="w-12 h-12 bg-slate-100 rounded-full flex items-center justify-center mx-auto mb-3">
-            <svg className="w-6 h-6 text-slate-400" fill="none" stroke="currentColor" viewBox="0 0 24 24">
-              <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9.172 16.172a4 4 0 015.656 0M9 10h.01M15 10h.01M21 12a9 9 0 11-18 0 9 9 0 0118 0z" />
-            </svg>
-          </div>
-          <p className="text-slate-500 text-sm font-medium">Không tìm thấy bác sĩ nào</p>
-          <p className="text-xs text-slate-400 mt-1">Thử thay đổi bộ lọc hoặc từ khóa tìm kiếm</p>
-          <button
-            onClick={() => { setSearchText(''); setSelectedSpecialty(null); }}
-            className="mt-3 text-xs text-primary-600 hover:underline font-semibold"
-          >
-            Xóa bộ lọc
-          </button>
+          <p className="text-slate-500 text-sm font-medium">Không tìm thấy bác sĩ còn lịch trống</p>
+          <p className="text-xs text-slate-400 mt-1">Thử đổi ngày, chuyên khoa, hoặc bác sĩ cần tạo lịch trước.</p>
         </div>
       ) : (
         <div className="grid grid-cols-1 sm:grid-cols-2 lg:grid-cols-3 xl:grid-cols-4 gap-4">
-          {filteredDoctors.map(doctor => (
-            <DoctorCard key={doctor.id} doctor={doctor} onBook={handleBook} />
+          {filteredDoctors.map((doctor) => (
+            <DoctorCard
+              key={doctor.id}
+              doctor={doctor}
+              onBook={(d) => {
+                setBookingDoctor(d);
+                setIsModalOpen(true);
+              }}
+            />
           ))}
         </div>
       )}
 
-      {/* Modal đặt lịch */}
       <BookingModal
         doctor={bookingDoctor}
         isOpen={isModalOpen}
-        onClose={() => { setIsModalOpen(false); setBookingDoctor(null); }}
+        onClose={() => {
+          setIsModalOpen(false);
+          setBookingDoctor(null);
+        }}
       />
     </div>
   );

@@ -3,9 +3,10 @@ import axiosClient from './axiosClient';
 const doctorApi = {
   // Lấy danh sách tất cả bác sĩ (công khai)
   // Backend: GET /api/doctor/all?specialty_id=...
-  getAll: (specialtyId = null) => {
+  getAll: (specialtyId = null, date = null) => {
     const params = {};
     if (specialtyId) params.specialty_id = specialtyId;
+    if (date) params.date = date;
     return axiosClient.get('/doctor/all', { params });
   },
 
@@ -19,6 +20,13 @@ const doctorApi = {
   // Backend: GET /api/doctor/:id/available-slots?date=YYYY-MM-DD
   getAvailableSlots: (doctorId, date) => {
     return axiosClient.get(`/doctor/${doctorId}/available-slots`, { params: { date } });
+  },
+
+  getAvailableDates: (doctorId, from = null, to = null) => {
+    const params = {};
+    if (from) params.from = from;
+    if (to) params.to = to;
+    return axiosClient.get(`/doctor/${doctorId}/available-dates`, { params });
   },
 
   // Lấy profile bác sĩ đang đăng nhập (cần token)

@@ -153,7 +153,7 @@ export default function ScheduleModal({ isOpen, onClose, onSubmit, initialData }
               required
             />
             <p className="text-[11px] text-slate-400 mt-1">
-              Ví dụ: 30 phút/bệnh nhân để hệ thống tự chia khung giờ hẹn (Bookable Slots).
+              Hệ thống tự chia thành các khung giờ có ngày tháng cụ thể để bệnh nhân đặt.
             </p>
           </div>
 

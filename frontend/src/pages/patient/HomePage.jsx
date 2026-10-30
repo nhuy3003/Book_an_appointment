@@ -1,7 +1,7 @@
 import React, { useState, useEffect } from 'react';
 import { Link } from 'react-router-dom';
 import doctorApi from '../../api/doctorApi';
-import { formatCurrency } from '../../utils/formatters';
+import { formatCurrency, formatDate } from '../../utils/formatters';
 
 export default function HomePage() {
   const [specialties, setSpecialties] = useState([]);
@@ -153,8 +153,13 @@ export default function HomePage() {
                   <p className="font-bold text-slate-800 text-xs truncate">{doctor.full_name}</p>
                   {doctor.specialty && <p className="text-[11px] text-primary-600 font-medium">{doctor.specialty}</p>}
                   <p className="text-xs font-bold text-slate-700 mt-1">{formatCurrency(doctor.price_per_appointment)}</p>
+                  {doctor.next_available_date && (
+                    <p className="text-[10px] text-emerald-600 mt-0.5">
+                      Trống {formatDate(doctor.next_available_date)}
+                    </p>
+                  )}
                   <Link
-                    to="/doctors"
+                    to={`/doctors?doctor=${doctor.id}`}
                     className="mt-2 block text-center bg-primary-50 hover:bg-primary-100 text-primary-700 text-[11px] font-semibold py-1.5 rounded-lg transition"
                   >
                     Đặt lịch
