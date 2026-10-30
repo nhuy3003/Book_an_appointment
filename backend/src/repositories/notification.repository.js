@@ -16,7 +16,29 @@ const getNotificationsByDoctorId = async (doctorId) => {
     });
 };
 
+// Đánh dấu 1 thông báo đã đọc
+const markAsRead = async (notificationId, doctorId) => {
+    const notification = await Notification.findOne({
+        where: { id: notificationId, doctor_id: doctorId }
+    });
+    if (!notification) return null;
+    notification.is_read = true;
+    await notification.save();
+    return notification;
+};
+
+// Đánh dấu tất cả thông báo của bác sĩ đã đọc
+const markAllAsRead = async (doctorId) => {
+    const [count] = await Notification.update(
+        { is_read: true },
+        { where: { doctor_id: doctorId, is_read: false } }
+    );
+    return count;
+};
+
 module.exports = {
     createNotification,
-    getNotificationsByDoctorId
+    getNotificationsByDoctorId,
+    markAsRead,
+    markAllAsRead
 };

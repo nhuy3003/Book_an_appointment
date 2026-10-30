@@ -22,6 +22,26 @@ const findDoctorById = async (id) => {
     });
 };
 
+// Lấy tất cả bác sĩ (kèm chuyên khoa) - API công khai cho bệnh nhân
+const findAllDoctors = async (specialtyId = null) => {
+    const where = {};
+    if (specialtyId) where.specialty_id = specialtyId;
+    return await Doctor.findAll({
+        where,
+        attributes: [
+            "id", "full_name", "phone_number",
+            "image_url", "experience_years", "price_per_appointment", "bio"
+        ],
+        include: [
+            {
+                model: Specialty,
+                attributes: ["id", "specialty_name"]
+            }
+        ],
+        order: [["full_name", "ASC"]]
+    });
+};
+
 // Cập nhật mật khẩu
 const updatePassword = async (id, password) => {
     return await Doctor.update({ password }, { where: { id } });
@@ -35,6 +55,7 @@ const updateDoctor = async (id, data) => {
 module.exports = {
     findByEmail,
     findDoctorById,
+    findAllDoctors,
     updatePassword,
     updateDoctor
 };

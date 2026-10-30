@@ -25,21 +25,27 @@ const getDoctorScheduleByDay = async (id, day_of_week) => {
     });
 };
 
+// lay tat ca mau lich (ca active va inactive) cua bac si - dung cho trang quan ly cua bac si
+const getAllTemplatesByDoctor = async (doctorId, onlyActive = false) => {
+    const where = { doctor_id: doctorId };
+    if (onlyActive) where.active = true;
+    return await DoctorAvailability.findAll({
+        where,
+        attributes: ["id", "doctor_id", "day_of_week", "start_time", "end_time", "slot_duration_minutes", "active"],
+        order: [["start_time", "ASC"]],
+        raw: true
+    });
+};
+
 const createSchedule = async (data) => {
     return await DoctorAvailability.create(data);
 };
 
 const updateSchedule = async (id, data) => {
-    return await DoctorAvailability.update(data, {
+    await DoctorAvailability.update(data, {
         where: { id }
     });
-
-    // kiem tra co cap nhat duoc khong
-    if (result[0] === 0) {
-        throw new Error("Không tìm thấy lịch hoặc không có thay đổi");
-    }
     return await DoctorAvailability.findByPk(id);
-
 };
 
 const findScheduleById = async (id) => {
@@ -63,6 +69,7 @@ const disableSchedule = async (id) => {
 module.exports = {
     getDoctorSchedule: getDoctorScheduleByDoctor,
     getDoctorScheduleByDay,
+    getAllTemplatesByDoctor,
     createSchedule,
     updateSchedule,
     findScheduleById,

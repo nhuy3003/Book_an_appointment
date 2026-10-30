@@ -1,7 +1,11 @@
 const Appointment = require("../models/appointment.model");
 const BookableSlot = require("../models/bookable_slot.model");
 const Patient = require("../models/patient.model");
+const Doctor = require("../models/doctor.model");
+const Specialty = require("../models/specialty.models");
 const { Op } = require("sequelize");
+
+const PATIENT_FIELDS = ["id", "full_name", "phone_number", "email", "address"];
 
 // Lấy danh sách lịch hẹn của bác sĩ
 const getAppointmentsByDoctorId = async (doctorId) => {
@@ -15,7 +19,7 @@ const getAppointmentsByDoctorId = async (doctorId) => {
             },
             {
                 model: Patient,
-                attributes: ["id", "full_name"]
+                attributes: PATIENT_FIELDS
             }
         ],
         order: [
@@ -38,7 +42,7 @@ const getAppointmentDetail = async (appointmentId, doctorId) => {
             },
             {
                 model: Patient,
-                attributes: ["id", "full_name", "email", "phone_number"]
+                attributes: PATIENT_FIELDS
             }
         ]
     });
@@ -58,7 +62,7 @@ const getAppointmentsByStatus = async (doctorId, status) => {
             },
             {
                 model: Patient,
-                attributes: ["id", "full_name"]
+                attributes: PATIENT_FIELDS
             }
         ],
         order: [
@@ -88,7 +92,7 @@ const getAppointmentsByDate = async (doctorId, date) => {
             },
             {
                 model: Patient,
-                attributes: ["id", "full_name"]
+                attributes: PATIENT_FIELDS
             }
         ],
         order: [
@@ -127,11 +131,42 @@ const updateAppointmentStatus = async (appointmentId, status) => {
     return appointment;
 };
 
+// Tìm lịch hẹn theo appointment_code (tra cứu công khai)
+const findByAppointmentCode = async (appointmentCode) => {
+    return await Appointment.findOne({
+        where: { appointment_code: appointmentCode },
+        attributes: ["id", "appointment_code", "status", "reason_for_visit", "price", "payment_method", "payment_status"],
+        include: [
+            {
+                model: BookableSlot,
+                attributes: ["slot_date", "start_time", "end_time", "doctor_id"],
+                include: [
+                    {
+                        model: Doctor,
+                        attributes: ["id", "full_name", "phone_number"],
+                        include: [
+                            {
+                                model: Specialty,
+                                attributes: ["id", "specialty_name"]
+                            }
+                        ]
+                    }
+                ]
+            },
+            {
+                model: Patient,
+                attributes: PATIENT_FIELDS
+            }
+        ]
+    });
+};
+
 module.exports = {
     getAppointmentsByDoctorId,
     getAppointmentDetail,
     getAppointmentsByStatus,
     getAppointmentsByDate,
     createAppointment,
-    updateAppointmentStatus
+    updateAppointmentStatus,
+    findByAppointmentCode
 };

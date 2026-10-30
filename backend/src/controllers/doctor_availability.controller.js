@@ -1,5 +1,11 @@
 const doctorService = require("../services/doctor_availability.service");
 
+// Trả lỗi theo statusCode của ApiError (mặc định 400)
+const sendError = (res, error) => res.status(error.statusCode || 400).json({
+    success: false,
+    message: error.message
+});
+
 const getDoctorSchedule = async(req, res) =>{
     try{
         const doctorId = req.params.id;
@@ -79,13 +85,11 @@ const createSchedule = async(req, res) => {
 
         res.status(201).json({
             success: true,
-            data: result
+            data: result,
+            message: `Tạo ca thành công, đã sinh ${result.slots?.created || 0} khung giờ khám`
         });
     } catch(error){
-        res.status(400).json({
-            success: false,
-            message: error.message
-        });
+        sendError(res, error);
     }
 };
 
@@ -133,10 +137,7 @@ const updateSchedule = async(req, res) => {
             data: result
         });
     } catch(error){
-        res.status(400).json({
-            success: false,
-            message:error.message
-        });
+        sendError(res, error);
     }
 };
 
@@ -168,18 +169,18 @@ const deleteSchedule = async(req, res) => {
             });
         }
 
-        await doctorService.deleteSchedule(id);
+        const result = await doctorService.deleteSchedule(id);
 
         res.json({
             success: true,
-            message: "Xóa lịch thành công"
+            data: result,
+            message: result.disabled
+                ? `Ca này đã có ${result.bookedCount} lịch hẹn nên được chuyển sang TẠM TẮT thay vì xóa (lịch hẹn cũ được giữ nguyên)`
+                : "Xóa lịch thành công"
         });
 
     } catch(error){
-        res.status(400).json({
-            success:false,
-            message:error.message
-        });
+        sendError(res, error);
     }
 };
 
@@ -219,10 +220,85 @@ const disableSchedule = async(req, res) =>{
         });
 
     } catch(error){
-        res.status(400).json({
-            success: false,
-            message: error.message
+        sendError(res, error);
+    }
+};
+
+// Tạo nhiều ca cùng lúc (nhiều thứ x nhiều khung giờ) + tự sinh slot N tuần tới
+const bulkCreateSchedules = async (req, res) => {
+    try {
+        const result = await doctorService.bulkCreateSchedules(req.user.id, req.body);
+        res.status(201).json({
+            success: true,
+            data: result,
+            message: `Đã tạo ${result.created.length} ca, sinh ${result.slots.created} khung giờ khám`
+                + (result.skipped.length ? ` (bỏ qua ${result.skipped.length} ca bị trùng giờ)` : "")
         });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// Sinh slot theo khoảng ngày từ các mẫu lịch đang bật
+const generateSlots = async (req, res) => {
+    try {
+        const { from, to } = req.body || {};
+        const result = await doctorService.generateSlots(req.user.id, from, to);
+        res.json({
+            success: true,
+            data: result,
+            message: `Đã sinh ${result.created} khung giờ khám mới`
+        });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// Lấy tất cả mẫu lịch (kể cả đang tắt) của bác sĩ đang đăng nhập
+const getMyTemplates = async (req, res) => {
+    try {
+        const data = await doctorService.getMyTemplates(req.user.id);
+        res.json({ success: true, data });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// Lấy slot theo khoảng ngày của bác sĩ đang đăng nhập
+const getMySlots = async (req, res) => {
+    try {
+        const { from, to } = req.query;
+        const data = await doctorService.getMySlots(req.user.id, from, to);
+        res.json({ success: true, data });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// Bật/tắt 1 slot
+const setSlotStatus = async (req, res) => {
+    try {
+        const data = await doctorService.setSlotStatus(req.user.id, req.params.slotId, req.body?.status);
+        res.json({ success: true, data });
+    } catch (error) {
+        sendError(res, error);
+    }
+};
+
+// Nghỉ cả ngày / mở lại ngày
+const setDayOff = async (req, res) => {
+    try {
+        const { date, off } = req.body || {};
+        const data = await doctorService.setDayOff(req.user.id, date, off !== false);
+        res.json({
+            success: true,
+            data,
+            message: data.off
+                ? `Đã đánh dấu nghỉ ngày ${date}` + (data.bookedCount ? ` (còn ${data.bookedCount} lịch hẹn đã đặt, vui lòng xử lý)` : "")
+                : `Đã mở lại lịch ngày ${date}`
+        });
+    } catch (error) {
+        sendError(res, error);
     }
 };
 
@@ -232,5 +308,11 @@ module.exports = {
     updateSchedule,
     deleteSchedule,
     disableSchedule,
-    getDoctorScheduleByDay
+    getDoctorScheduleByDay,
+    bulkCreateSchedules,
+    generateSlots,
+    getMyTemplates,
+    getMySlots,
+    setSlotStatus,
+    setDayOff
 };

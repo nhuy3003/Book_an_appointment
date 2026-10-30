@@ -1,12 +1,20 @@
 const appointmentService = require("../services/appointment.service");
 const response = require("../utils/response");
 
-// Lấy danh sách lịch hẹn của bác sĩ
+// Lấy danh sách lịch hẹn của bác sĩ (hỗ trợ filter qua query: ?status=&date=)
 const getAppointmentsByDoctorId = async (req, res, next) => {
   try {
-    const doctorId = req.user.id; // lấy id bác sĩ đang đăng nhập từ token
+    const doctorId = req.user.id;
+    const { status, date } = req.query;
 
-    const appointments = await appointmentService.getAppointmentsByDoctorId(doctorId);
+    let appointments;
+    if (status && status !== 'all') {
+      appointments = await appointmentService.getAppointmentsByStatus(doctorId, status);
+    } else if (date) {
+      appointments = await appointmentService.getAppointmentsByDate(doctorId, date);
+    } else {
+      appointments = await appointmentService.getAppointmentsByDoctorId(doctorId);
+    }
 
     return response.success(
       res,
@@ -14,7 +22,11 @@ const getAppointmentsByDoctorId = async (req, res, next) => {
       "Lấy lịch hẹn thành công"
     );
   } catch (error) {
-    next(error); // chuyển lỗi sang errorHandler
+    // Nếu không tìm thấy, trả về mảng trống thay vì 404
+    if (error.statusCode === 404) {
+      return response.success(res, [], "Không có lịch hẹn nào");
+    }
+    next(error);
   }
 };
 
@@ -126,6 +138,17 @@ const updateAppointmentStatus = async (req, res, next) => {
   }
 };
 
+// Tra cứu lịch hẹn theo appointment_code (công khai, không cần đăng nhập)
+const getAppointmentByCode = async (req, res, next) => {
+  try {
+    const { code } = req.params;
+    const appointment = await appointmentService.getAppointmentByCode(code);
+    return response.success(res, appointment, "Tra cứu lịch hẹn thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
 
 module.exports = {
   getAppointmentsByDoctorId,
@@ -133,6 +156,7 @@ module.exports = {
   getAppointmentsByStatus,
   getAppointmentsByDate,
   createAppointment,
-  updateAppointmentStatus
+  updateAppointmentStatus,
+  getAppointmentByCode
 };
 

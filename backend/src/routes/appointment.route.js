@@ -24,6 +24,8 @@ const authMiddleware = require("../middlewares/auth.middleware");
  */
 router.get("/", authMiddleware, appointmentController.getAppointmentsByDoctorId);
 
+// Tra cứu công khai theo mã - ĐặT TRƯỚC /:id để tránh bị match nhầm
+router.get("/code/:code", appointmentController.getAppointmentByCode);
 
 /**
  * @swagger
@@ -49,7 +51,7 @@ router.get("/", authMiddleware, appointmentController.getAppointmentsByDoctorId)
  *       201:
  *         description: Tạo thành công
  */
-router.post("/create", authMiddleware, appointmentController.createAppointment);
+router.post("/create", appointmentController.createAppointment);
 
 
 /**
@@ -147,4 +149,4 @@ router.patch("/:id/status", authMiddleware, appointmentController.updateAppointm
  */
 router.get("/:id", authMiddleware, appointmentController.getAppointmentDetail);
 
-module.exports = router;
+module.exports = router;
