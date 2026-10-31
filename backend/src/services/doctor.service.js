@@ -3,6 +3,7 @@ const slotRepository = require("../repositories/bookable_slot.repository");
 const specialtyRepository = require("../repositories/specialty.repository");
 const ApiError = require("../utils/ApiError");
 const { todayStr, nowTimeStr, addDays, isValidDateStr, diffDays } = require("../utils/dateHelper");
+const cache = require("../utils/cache");
 
 const AVAILABILITY_WINDOW_DAYS = 28; // so ngay toi hien thi lich trong cho benh nhan
 
@@ -36,6 +37,11 @@ const filterPastSlots = (slots) => {
 // Kèm thông tin lịch trống: số slot còn trống trong 14 ngày tới, ngày trống gần nhất.
 // Nếu truyền date => chỉ trả về bác sĩ còn slot trống trong ngày đó.
 const getAllDoctors = async (specialtyId = null, date = null) => {
+  // --- CACHE: key theo query params ---
+  const cacheKey = `doctors:all:${specialtyId || ""}:${date || ""}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   const doctors = await doctorRepository.findAllDoctors(specialtyId);
   if (doctors.length === 0) return [];
 
@@ -87,19 +93,37 @@ const getAllDoctors = async (specialtyId = null, date = null) => {
     return a.next_available_date.localeCompare(b.next_available_date) || b.available_slots_count - a.available_slots_count;
   });
 
+  // --- CACHE: lưu kết quả (TTL 30s) ---
+  cache.set(cacheKey, result);
   return result;
 };
 
 // Lấy tất cả chuyên khoa (công khai)
 const getAllSpecialties = async () => {
-  return await specialtyRepository.findAllSpecialties();
+  // --- CACHE: specialties ít thay đổi, TTL 60s ---
+  const cacheKey = "specialties:all";
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
+  const data = await specialtyRepository.findAllSpecialties();
+  cache.set(cacheKey, data, 60 * 1000);
+  return data;
 };
 
 // Lấy slot khả dụng của bác sĩ theo ngày (ẩn slot đã qua giờ)
 const getAvailableSlots = async (doctorId, date) => {
   if (!isValidDateStr(date) || date < todayStr()) return [];
+
+  // --- CACHE: key theo doctorId + date ---
+  const cacheKey = `slots:${doctorId}:${date}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   const slots = await slotRepository.findAvailableSlotsByDoctorAndDate(doctorId, date);
-  return filterPastSlots(slots.map(s => s.toJSON()));
+  const result = filterPastSlots(slots.map(s => s.toJSON()));
+
+  cache.set(cacheKey, result);
+  return result;
 };
 
 // Lấy danh sách ngày còn slot trống của bác sĩ (mặc định 14 ngày tới)
@@ -110,13 +134,21 @@ const getAvailableDates = async (doctorId, from = null, to = null) => {
   if (diffDays(from, to) > 92) to = addDays(from, 92);
   if (to < from) return [];
 
+  // --- CACHE: key theo doctorId + from + to ---
+  const cacheKey = `dates:${doctorId}:${from}:${to}`;
+  const cached = cache.get(cacheKey);
+  if (cached) return cached;
+
   const slots = filterPastSlots(await slotRepository.findSlotsInRange({
     doctorId, from, to, status: "available"
   }));
 
   const map = {};
   for (const s of slots) map[s.slot_date] = (map[s.slot_date] || 0) + 1;
-  return Object.keys(map).sort().map(date => ({ date, available: map[date] }));
+  const result = Object.keys(map).sort().map(date => ({ date, available: map[date] }));
+
+  cache.set(cacheKey, result);
+  return result;
 };
 
 const updateProfile = async (doctorId, data) => {
@@ -142,6 +174,19 @@ const updateProfile = async (doctorId, data) => {
   }
 
   await doctorRepository.updateDoctor(doctorId, filteredData);
+
+  // Nếu đổi tên / ảnh thì list bác sĩ cũng cần cập nhật
+  invalidateDoctorCache(doctorId);
+};
+
+/**
+ * Xóa tất cả cache liên quan đến 1 bác sĩ.
+ * Gọi hàm này sau khi tạo/sửa/xóa lịch, đặt hẹn, bật/tắt slot...
+ */
+const invalidateDoctorCache = (doctorId) => {
+  cache.delByPattern(`slots:${doctorId}:`);
+  cache.delByPattern(`dates:${doctorId}:`);
+  cache.delByPattern("doctors:all:");
 };
 
 module.exports = {
@@ -150,5 +195,6 @@ module.exports = {
   getAllSpecialties,
   getAvailableSlots,
   getAvailableDates,
-  updateProfile
-};
+  updateProfile,
+  invalidateDoctorCache
+};

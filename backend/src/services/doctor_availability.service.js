@@ -1,4 +1,5 @@
 const doctorAvailabilityRepository = require("../repositories/doctor_availability.repository");
+const cache = require("../utils/cache");
 const slotRepository = require("../repositories/bookable_slot.repository");
 const BookableSlot = require("../models/bookable_slot.model");
 const ApiError = require("../utils/ApiError");
@@ -10,6 +11,15 @@ const {
 const VALID_DAYS = ["Monday", "Tuesday", "Wednesday", "Thursday", "Friday", "Saturday", "Sunday"];
 const DEFAULT_WEEKS = 4;      // so tuan tu dong sinh slot khi tao/sua mau lich
 const MAX_RANGE_DAYS = 92;    // gioi han khoang sinh slot (~3 thang)
+
+/**
+ * Helper: xóa cache liên quan đến 1 bác sĩ.
+ * Dùng lazy require để tránh circular dependency với doctor.service.
+ */
+const invalidateCache = (doctorId) => {
+    const { invalidateDoctorCache } = require("./doctor.service");
+    invalidateDoctorCache(doctorId);
+};
 
 const getDoctorSchedule = async (doctorId) => {
     const schedules = await doctorAvailabilityRepository.getDoctorSchedule(doctorId);
@@ -124,6 +134,10 @@ const generateSlots = async (doctorId, from, to, onlyAvailabilityId = null) => {
     if (newSlots.length > 0) {
         await slotRepository.createManySlots(newSlots);
     }
+
+    // Sinh slot mới → xóa cache để client thấy slot mới
+    invalidateCache(doctorId);
+
     return { from, to, created: newSlots.length, skipped };
 };
 
@@ -131,8 +145,13 @@ const generateSlots = async (doctorId, from, to, onlyAvailabilityId = null) => {
 const regenerateForTemplate = async (template) => {
     const today = todayStr();
     await slotRepository.deleteUnbookedSlotsByAvailabilityFrom(template.id, today);
-    if (!template.active) return { created: 0 };
+    if (!template.active) {
+        // Tắt ca → slot bị xóa → xóa cache
+        invalidateCache(template.doctor_id);
+        return { created: 0 };
+    }
     const horizonEnd = await getHorizonEnd(template.doctor_id);
+    // generateSlots bên trong đã gọi invalidateCache
     return await generateSlots(template.doctor_id, today, horizonEnd, template.id);
 };
 
@@ -180,6 +199,7 @@ const createSchedule = async (data) => {
     let slots = { created: 0 };
     if (active) {
         const horizonEnd = await getHorizonEnd(data.doctor_id);
+        // generateSlots bên trong đã gọi invalidateCache
         slots = await generateSlots(data.doctor_id, todayStr(), horizonEnd, schedule.id);
     }
     return { schedule, slots };
@@ -238,6 +258,7 @@ const bulkCreateSchedules = async (doctorId, data) => {
     // Sinh slot cho N tuan toi (bao gom ca cac mau lich cu => dong bo)
     const today = todayStr();
     const horizon = addDays(today, weeks * 7 - 1);
+    // generateSlots bên trong đã gọi invalidateCache
     const slots = await generateSlots(doctorId, today, horizon);
 
     return { created, skipped, slots };
@@ -279,6 +300,7 @@ const updateSchedule = async (id, data) => {
     });
 
     // Dong bo slot tuong lai (slot da duoc dat se duoc giu nguyen)
+    // regenerateForTemplate bên trong đã gọi invalidateCache
     const slots = await regenerateForTemplate(updated.get({ plain: true }));
     return { schedule: updated, slots };
 };
@@ -289,16 +311,20 @@ const deleteSchedule = async (id) => {
         throw new ApiError(404, "Không tìm thấy lịch làm việc");
     }
 
+    const doctorId = schedule.doctor_id;
+
     // Neu ca nay da co benh nhan dat lich => khong xoa han (tranh mat lich hen do FK cascade)
     // ma chuyen sang tat va don cac slot trong o tuong lai
     const bookedCount = await slotRepository.countBookedByAvailability(id);
     if (bookedCount > 0) {
         await doctorAvailabilityRepository.updateSchedule(id, { active: false });
         await slotRepository.deleteUnbookedSlotsByAvailabilityFrom(id, todayStr());
+        invalidateCache(doctorId);
         return { deleted: false, disabled: true, bookedCount };
     }
 
     await doctorAvailabilityRepository.deleteSchedule(id);
+    invalidateCache(doctorId);
     return { deleted: true, disabled: false, bookedCount: 0 };
 }
 
@@ -308,7 +334,9 @@ const disableSchedule = async (id) => {
         throw new ApiError(404, "Không tìm thấy lịch làm việc");
     }
     await slotRepository.deleteUnbookedSlotsByAvailabilityFrom(id, todayStr());
-    return await doctorAvailabilityRepository.updateSchedule(id, { active: false });
+    const result = await doctorAvailabilityRepository.updateSchedule(id, { active: false });
+    invalidateCache(schedule.doctor_id);
+    return result;
 }
 
 const findScheduleById = async (id) => {
@@ -342,6 +370,8 @@ const setSlotStatus = async (doctorId, slotId, status) => {
     if (slot.status === "booked") throw new ApiError(400, "Slot đã có bệnh nhân đặt, không thể thay đổi");
     if (slot.slot_date < todayStr()) throw new ApiError(400, "Không thể thay đổi slot trong quá khứ");
     await slotRepository.updateSlotStatus(slotId, status);
+    // Bật/tắt slot → xóa cache để client thấy thay đổi
+    invalidateCache(doctorId);
     return { id: Number(slotId), status };
 };
 
@@ -352,6 +382,8 @@ const setDayOff = async (doctorId, date, off) => {
     const [affected] = await slotRepository.updateUnbookedSlotsByDate(doctorId, date, off ? "off" : "available");
     const daySlots = await slotRepository.findSlotsInRange({ doctorId, from: date, to: date });
     const bookedCount = daySlots.filter(s => s.status === "booked").length;
+    // Nghỉ/mở ngày → xóa cache
+    invalidateCache(doctorId);
     return { date, off: Boolean(off), affected, bookedCount };
 };
 

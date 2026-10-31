@@ -5,6 +5,8 @@ const patientRepository = require("../repositories/patient.repository");
 const ApiError = require("../utils/ApiError");
 const sendMail = require("../utils/sendMail");
 const notificationService = require("../services/notification.service");
+const cache = require("../utils/cache");
+const { invalidateDoctorCache } = require("./doctor.service");
 
 // Lấy danh sách lịch hẹn của bác sĩ
 const getAppointmentsByDoctorId = async (doctorId) => {
@@ -113,6 +115,9 @@ const createAppointment = async (data) => {
         data.bookable_slot_id,
         "booked"
     );
+        
+    // Xóa cache slot + dates + doctors list của bác sĩ (slot vừa bị đặt → không hiển thị nữa)
+    invalidateDoctorCache(slot.doctor_id);
 
     try {
         await notificationService.createNotification(
@@ -232,6 +237,8 @@ const updateAppointmentStatus = async (appointmentId, newStatus, doctorId) => {
     // Slot logic
     if (newStatus === "cancelled" || newStatus === "missed") {
         await slotRepository.updateSlotStatus(slotInfo.id, "available");
+        // Hủy/bỏ lỡ → slot trở lại available → xóa cache để hiện slot mới
+        invalidateDoctorCache(slotInfo.doctor_id);
     }
 
     // Notification
