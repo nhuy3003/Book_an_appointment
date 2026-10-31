@@ -5,6 +5,7 @@ const patientRepository = require("../repositories/patient.repository");
 const ApiError = require("../utils/ApiError");
 const sendMail = require("../utils/sendMail");
 const notificationService = require("../services/notification.service");
+const { emitToDoctor } = require("../utils/socket");
 
 // Lấy danh sách lịch hẹn của bác sĩ
 const getAppointmentsByDoctorId = async (doctorId) => {
@@ -127,6 +128,34 @@ const createAppointment = async (data) => {
 
     const doctor = await doctorRepository.findDoctorById(slot.doctor_id);
     const patient = await patientRepository.findPatientById(patientId);
+
+    // Phát sự kiện realtime cho bác sĩ tương ứng qua Socket.io
+    try {
+        emitToDoctor(slot.doctor_id, "appointment:new", {
+            appointmentId: appointment.id,
+            appointmentCode: appointment.appointment_code,
+            bookableSlotId: data.bookable_slot_id,
+            slot: {
+                id: slot.id,
+                slot_date: slot.slot_date,
+                start_time: slot.start_time,
+                end_time: slot.end_time,
+                status: "booked"
+            },
+            patient: {
+                id: patientId,
+                full_name: patient?.full_name || data.patient_name || "Bệnh nhân",
+                phone_number: patient?.phone_number || data.phone_number
+            },
+            appointment: {
+                ...(appointment.toJSON ? appointment.toJSON() : appointment),
+                BookableSlot: slot,
+                Patient: patient
+            }
+        });
+    } catch (socketErr) {
+        console.error("[Socket] Emit appointment:new thất bại:", socketErr.message);
+    }
 
     // HTML email
     const htmlContent = `

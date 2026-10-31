@@ -1,4 +1,5 @@
 import React, { createContext, useContext, useState, useEffect } from 'react';
+import { io } from 'socket.io-client';
 import axiosClient from '../api/axiosClient';
 
 const AuthContext = createContext(null);
@@ -7,6 +8,7 @@ export function AuthProvider({ children }) {
   const [doctor, setDoctor] = useState(null);
   const [token, setToken] = useState(null);
   const [loading, setLoading] = useState(true);
+  const [socket, setSocket] = useState(null);
 
   useEffect(() => {
     // Đọc trạng thái đăng nhập từ localStorage khi reload web
@@ -25,6 +27,32 @@ export function AuthProvider({ children }) {
     }
     setLoading(false);
   }, []);
+
+  // Thiết lập kết nối Socket.io khi bác sĩ đã đăng nhập
+  useEffect(() => {
+    if (doctor?.id) {
+      const socketServerUrl = import.meta.env.VITE_SOCKET_URL || 'http://localhost:3000';
+      const socketInstance = io(socketServerUrl, {
+        transports: ['websocket', 'polling'],
+      });
+
+      socketInstance.on('connect', () => {
+        socketInstance.emit('join_doctor', doctor.id);
+      });
+
+      setSocket(socketInstance);
+
+      return () => {
+        socketInstance.disconnect();
+        setSocket(null);
+      };
+    } else {
+      if (socket) {
+        socket.disconnect();
+        setSocket(null);
+      }
+    }
+  }, [doctor?.id]);
 
   // Hàm Đăng nhập Bác sĩ
   const login = async (email, password) => {
@@ -80,6 +108,7 @@ export function AuthProvider({ children }) {
       value={{
         doctor,
         token,
+        socket,
         isAuthenticated: !!token,
         loading,
         login,
