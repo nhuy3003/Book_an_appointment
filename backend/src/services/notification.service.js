@@ -1,5 +1,5 @@
 const notificationRepository = require("../repositories/notification.repository");
-const ApiError = require("../utils/ApiError");
+const ApiError = require("../utils/apiError");
 
 // Tạo thông báo
 const createNotification = async(doctorId, patientId, title, message) => {

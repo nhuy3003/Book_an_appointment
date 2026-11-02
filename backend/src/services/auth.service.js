@@ -1,7 +1,7 @@
 const bcrypt = require("bcryptjs");
 const jwt = require("jsonwebtoken");
 const doctorRepository = require("../repositories/doctor.repository");
-const ApiError = require("../utils/ApiError");
+const ApiError = require("../utils/apiError");
 const env = require("../config/env");
 const { addToken } = require("../utils/tokenBlacklist");
 const { getToken, setToken, clearToken } = require("../utils/tokenStore");

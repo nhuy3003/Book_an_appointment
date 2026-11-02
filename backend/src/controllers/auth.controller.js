@@ -1,7 +1,7 @@
 const authService = require("../services/auth.service");
 const response = require("../utils/response");
 const { logoutService } = require("../services/auth.service");
-const ApiError = require("../utils/ApiError");
+const ApiError = require("../utils/apiError");
 const loginDoctor = async (req, res, next) => {
     try {
         const { email, password} = req.body;
