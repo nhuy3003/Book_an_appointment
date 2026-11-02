@@ -41,7 +41,7 @@ const addDays = (date, n) => {
 const todayISO = () => toISODate(new Date());
 
 export default function DoctorSchedulePage() {
-  const { doctor } = useAuth();
+  const { doctor, socket } = useAuth();
   const [templates, setTemplates] = useState([]);
   const [slots, setSlots] = useState([]);
   const [weekStart, setWeekStart] = useState(() => startOfWeek(new Date()));
@@ -85,6 +85,26 @@ export default function DoctorSchedulePage() {
     fetchAll();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [weekDates[0], weekDates[6]]);
+
+  // Lắng nghe sự kiện ca hẹn mới qua Socket để chuyển slot sang 'booked' tức thì
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewAppointment = (data) => {
+      const bookedSlotId = data?.bookableSlotId || data?.slot?.id;
+      if (bookedSlotId) {
+        setSlots((prevSlots) =>
+          prevSlots.map((s) => (s.id === bookedSlotId ? { ...s, status: 'booked' } : s))
+        );
+      }
+    };
+
+    socket.on('appointment:new', handleNewAppointment);
+
+    return () => {
+      socket.off('appointment:new', handleNewAppointment);
+    };
+  }, [socket]);
 
   const slotsByDate = useMemo(() => {
     const map = {};

@@ -1,8 +1,10 @@
 import React, { useState, useEffect, useRef } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import notificationApi from '../../api/notificationApi';
 import { formatDate } from '../../utils/formatters';
 
 export default function NotificationDropdown() {
+  const { socket } = useAuth();
   const [isOpen, setIsOpen] = useState(false);
   const [notifications, setNotifications] = useState([]);
   const [unreadCount, setUnreadCount] = useState(0);
@@ -30,10 +32,36 @@ export default function NotificationDropdown() {
   useEffect(() => {
     fetchNotifications();
 
-    // Polling tự động làm mới thông báo mỗi 30 giây
+    // Polling tự động làm mới thông báo mỗi 30 giây (giữ làm dự phòng)
     const interval = setInterval(fetchNotifications, 30000);
     return () => clearInterval(interval);
   }, []);
+
+  // Lắng nghe sự kiện realtime qua Socket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewAppointment = (data) => {
+      // Tăng unreadCount ngay lập tức
+      setUnreadCount((prev) => prev + 1);
+
+      // Thêm thông báo vào danh sách hiển thị
+      const newNoti = {
+        id: 'realtime-' + Date.now(),
+        title: 'Lịch hẹn mới',
+        message: `Bệnh nhân ${data?.patient?.full_name || 'mới'} vừa đặt lịch khám (${data?.slot?.start_time?.slice(0, 5) || ''} ${data?.slot?.slot_date || ''})`,
+        is_read: false,
+        created_at: new Date().toISOString(),
+      };
+      setNotifications((prev) => [newNoti, ...prev]);
+    };
+
+    socket.on('appointment:new', handleNewAppointment);
+
+    return () => {
+      socket.off('appointment:new', handleNewAppointment);
+    };
+  }, [socket]);
 
   // Đóng dropdown khi click ra ngoài
   useEffect(() => {

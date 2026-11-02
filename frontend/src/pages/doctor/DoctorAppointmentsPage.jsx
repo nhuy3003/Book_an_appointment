@@ -1,9 +1,11 @@
 import React, { useState, useEffect } from 'react';
+import { useAuth } from '../../context/AuthContext';
 import appointmentApi from '../../api/appointmentApi';
 import { formatCurrency, formatDate, getAppointmentStatusBadge } from '../../utils/formatters';
 import AppointmentDetailModal from '../../components/doctor/AppointmentDetailModal';
 
 export default function DoctorAppointmentsPage() {
+  const { socket } = useAuth();
   const [appointments, setAppointments] = useState([]);
   const [loading, setLoading] = useState(false);
   const [error, setError] = useState(null);
@@ -36,6 +38,22 @@ export default function DoctorAppointmentsPage() {
   useEffect(() => {
     fetchAppointments();
   }, [statusFilter, dateFilter]);
+
+  // Lắng nghe sự kiện ca hẹn mới qua Socket
+  useEffect(() => {
+    if (!socket) return;
+
+    const handleNewAppointment = () => {
+      // Tự động fetch lại danh sách ca hẹn để đảm bảo filter và dữ liệu luôn chính xác
+      fetchAppointments();
+    };
+
+    socket.on('appointment:new', handleNewAppointment);
+
+    return () => {
+      socket.off('appointment:new', handleNewAppointment);
+    };
+  }, [socket, statusFilter, dateFilter]);
 
   // Cập nhật trạng thái và ghi chú
   const handleUpdateStatus = async (id, updateData) => {
