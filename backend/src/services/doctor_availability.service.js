@@ -2,7 +2,7 @@ const doctorAvailabilityRepository = require("../repositories/doctor_availabilit
 const cache = require("../utils/cache");
 const slotRepository = require("../repositories/bookable_slot.repository");
 const BookableSlot = require("../models/bookable_slot.model");
-const ApiError = require("../utils/ApiError");
+const ApiError = require("../utils/apiError");
 const {
     todayStr, isValidDateStr, addDays, dayOfWeek, diffDays, eachDay,
     timeToMinutes, minutesToTime, normalizeTime

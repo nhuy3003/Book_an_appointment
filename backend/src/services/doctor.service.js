@@ -1,7 +1,7 @@
 const doctorRepository = require("../repositories/doctor.repository");
 const slotRepository = require("../repositories/bookable_slot.repository");
 const specialtyRepository = require("../repositories/specialty.repository");
-const ApiError = require("../utils/ApiError");
+const ApiError = require("../utils/apiError");
 const { todayStr, nowTimeStr, addDays, isValidDateStr, diffDays } = require("../utils/dateHelper");
 const cache = require("../utils/cache");
 
