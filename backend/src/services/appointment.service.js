@@ -7,134 +7,157 @@ const sendMail = require("../utils/sendMail");
 const notificationService = require("../services/notification.service");
 const cache = require("../utils/cache");
 const { invalidateDoctorCache } = require("./doctor.service");
+const { emitToDoctor } = require("../utils/socket");
 
 // Lấy danh sách lịch hẹn của bác sĩ
 const getAppointmentsByDoctorId = async (doctorId) => {
-    const appointments = await appointmentRepository.getAppointmentsByDoctorId(doctorId);
+  const appointments = await appointmentRepository.getAppointmentsByDoctorId(doctorId);
 
-    if (!appointments || appointments.length === 0) {
-        throw new ApiError(404, "Không có lịch hẹn nào");
-    }
+  if (!appointments || appointments.length === 0) {
+    throw new ApiError(404, "Không có lịch hẹn nào");
+  }
 
-    return appointments;
+  return appointments;
 };
 
 // Lấy chi tiết lịch hẹn
 const getAppointmentDetail = async (appointmentId, doctorId) => {
+  const appointment = await appointmentRepository.getAppointmentDetail(appointmentId, doctorId);
 
-    const appointment =
-        await appointmentRepository.getAppointmentDetail(appointmentId, doctorId);
+  // Nếu không tìm thấy hoặc lịch hẹn không thuộc về bác sĩ này
+  if (!appointment) {
+    throw new ApiError(404, "Không tìm thấy chi tiết lịch hẹn");
+  }
 
-    // Nếu không tìm thấy hoặc lịch hẹn không thuộc về bác sĩ này
-    if (!appointment) {
-        throw new ApiError(404, "Không tìm thấy chi tiết lịch hẹn");
-    }
-
-    return appointment;
+  return appointment;
 };
 
 // Lọc lịch hẹn theo tình trạng
 const getAppointmentsByStatus = async (doctorId, status) => {
-    const appointments = await appointmentRepository.getAppointmentsByStatus(doctorId, status);
+  const appointments = await appointmentRepository.getAppointmentsByStatus(doctorId, status);
 
-    if (!appointments || appointments.length === 0) {
-        throw new ApiError(404, "Không tìm thấy lịch hẹn theo tình trạng");
-    }
+  if (!appointments || appointments.length === 0) {
+    throw new ApiError(404, "Không tìm thấy lịch hẹn theo tình trạng");
+  }
 
-    return appointments;
+  return appointments;
 };
 
 // Lọc lịch hẹn theo ngày khám
 const getAppointmentsByDate = async (doctorId, date) => {
-    const appointments = await appointmentRepository.getAppointmentsByDate(doctorId, date);
+  const appointments = await appointmentRepository.getAppointmentsByDate(doctorId, date);
 
-    if (!appointments || appointments.length === 0) {
-        throw new ApiError(404, "Không tìm thấy lịch hẹn theo ngày khám");
-    }
+  if (!appointments || appointments.length === 0) {
+    throw new ApiError(404, "Không tìm thấy lịch hẹn theo ngày khám");
+  }
 
-    return appointments;
+  return appointments;
 };
 
-// Tạo lịch hẹn 
+// Tạo lịch hẹn
 const createAppointment = async (data) => {
+  const slot = await slotRepository.findSlotById(data.bookable_slot_id);
 
-    const slot = await slotRepository.findSlotById(data.bookable_slot_id);
+  if (!slot) {
+    throw new ApiError(404, "Slot không tồn tại");
+  }
 
-    if (!slot) {
-        throw new ApiError(404, "Slot không tồn tại");
+  if (slot.status === "booked") {
+    throw new ApiError(400, "Slot đã được đặt");
+  }
+
+  if (slot.status === "off") {
+    throw new ApiError(400, "Bác sĩ bận ngày này");
+  }
+
+  // Nếu không có patient_id, tự động tìm hoặc tạo patient theo số điện thoại
+  let patientId = data.patient_id;
+  if (!patientId && data.phone_number) {
+    let patient = await patientRepository.findPatientByPhone(data.phone_number);
+    if (!patient) {
+      patient = await patientRepository.createPatient({
+        full_name: data.patient_name || "Bệnh nhân",
+        phone_number: data.phone_number,
+        email: data.email || "",
+        address: data.address || "",
+        password: "",
+      });
+    } else {
+      await patientRepository.updatePatient(patient.id, {
+        full_name: data.patient_name || patient.full_name,
+        email: data.email || patient.email || "",
+        address: data.address || patient.address || "",
+        phone_number: data.phone_number,
+      });
+      patient = await patientRepository.findPatientById(patient.id);
     }
+    patientId = patient.id;
+  }
 
-    if (slot.status === "booked") {
-        throw new ApiError(400, "Slot đã được đặt");
-    }
+  if (!patientId) {
+    throw new ApiError(400, "Cần cung cấp thông tin bệnh nhân (số điện thoại)");
+  }
 
-    if (slot.status === "off") {
-        throw new ApiError(400, "Bác sĩ bận ngày này");
-    }
+  const appointment = await appointmentRepository.createAppointment({
+    bookable_slot_id: data.bookable_slot_id,
+    patient_id: patientId,
+    reason_for_visit: data.reason_for_visit || "Khám tổng quát",
+    note: data.note || "",
+    price: data.price || 0,
+    payment_method: data.payment_method === "online" ? "online" : "offline",
+    status: "pending",
+    payment_status: "pending",
+  });
 
-    // Nếu không có patient_id, tự động tìm hoặc tạo patient theo số điện thoại
-    let patientId = data.patient_id;
-    if (!patientId && data.phone_number) {
-        let patient = await patientRepository.findPatientByPhone(data.phone_number);
-        if (!patient) {
-            patient = await patientRepository.createPatient({
-                full_name: data.patient_name || "Bệnh nhân",
-                phone_number: data.phone_number,
-                email: data.email || "",
-                address: data.address || "",
-                password: ""
-            });
-        } else {
-            await patientRepository.updatePatient(patient.id, {
-                full_name: data.patient_name || patient.full_name,
-                email: data.email || patient.email || "",
-                address: data.address || patient.address || "",
-                phone_number: data.phone_number
-            });
-            patient = await patientRepository.findPatientById(patient.id);
-        }
-        patientId = patient.id;
-    }
+  await slotRepository.updateSlotStatus(data.bookable_slot_id, "booked");
 
-    if (!patientId) {
-        throw new ApiError(400, "Cần cung cấp thông tin bệnh nhân (số điện thoại)");
-    }
+  // Xóa cache slot + dates + doctors list của bác sĩ (slot vừa bị đặt → không hiển thị nữa)
+  invalidateDoctorCache(slot.doctor_id);
 
-    const appointment = await appointmentRepository.createAppointment({
-        bookable_slot_id: data.bookable_slot_id,
-        patient_id: patientId,
-        reason_for_visit: data.reason_for_visit || "Khám tổng quát",
-        note: data.note || "",
-        price: data.price || 0,
-        payment_method: data.payment_method === "online" ? "online" : "offline",
-        status: "pending",
-        payment_status: "pending"
-    });
-
-    await slotRepository.updateSlotStatus(
-        data.bookable_slot_id,
-        "booked"
+  try {
+    await notificationService.createNotification(
+      slot.doctor_id,
+      patientId,
+      "Lịch hẹn mới",
+      "Có bệnh nhân vừa đặt lịch khám",
     );
-        
-    // Xóa cache slot + dates + doctors list của bác sĩ (slot vừa bị đặt → không hiển thị nữa)
-    invalidateDoctorCache(slot.doctor_id);
+  } catch (err) {
+    console.error("Không tạo được thông báo lịch hẹn:", err.message);
+  }
 
-    try {
-        await notificationService.createNotification(
-            slot.doctor_id,
-            patientId,
-            "Lịch hẹn mới",
-            "Có bệnh nhân vừa đặt lịch khám"
-        );
-    } catch (err) {
-        console.error("Không tạo được thông báo lịch hẹn:", err.message);
-    }
+  const doctor = await doctorRepository.findDoctorById(slot.doctor_id);
+  const patient = await patientRepository.findPatientById(patientId);
 
-    const doctor = await doctorRepository.findDoctorById(slot.doctor_id);
-    const patient = await patientRepository.findPatientById(patientId);
+  // Phát sự kiện realtime cho bác sĩ tương ứng qua Socket.io
+  try {
+    emitToDoctor(slot.doctor_id, "appointment:new", {
+      appointmentId: appointment.id,
+      appointmentCode: appointment.appointment_code,
+      bookableSlotId: data.bookable_slot_id,
+      slot: {
+        id: slot.id,
+        slot_date: slot.slot_date,
+        start_time: slot.start_time,
+        end_time: slot.end_time,
+        status: "booked",
+      },
+      patient: {
+        id: patientId,
+        full_name: patient?.full_name || data.patient_name || "Bệnh nhân",
+        phone_number: patient?.phone_number || data.phone_number,
+      },
+      appointment: {
+        ...(appointment.toJSON ? appointment.toJSON() : appointment),
+        BookableSlot: slot,
+        Patient: patient,
+      },
+    });
+  } catch (socketErr) {
+    console.error("[Socket] Emit appointment:new thất bại:", socketErr.message);
+  }
 
-    // HTML email
-    const htmlContent = `
+  // HTML email
+  const htmlContent = `
     <div style="font-family: Arial; padding:20px">
         <h2 style="color:#2c7be5;">Bạn có lịch hẹn khám mới</h2>
 
@@ -179,123 +202,121 @@ const createAppointment = async (data) => {
     </div>
     `;
 
-    try {
-        if (doctor?.email) {
-            await sendMail(
-                doctor.email,
-                "Bạn có lịch hẹn khám mới",
-                htmlContent
-            );
-        }
-    } catch (err) {
-        console.error("Gửi mail lịch hẹn thất bại:", err.message);
+  try {
+    if (doctor?.email) {
+      await sendMail(doctor.email, "Bạn có lịch hẹn khám mới", htmlContent);
     }
+  } catch (err) {
+    console.error("Gửi mail lịch hẹn thất bại:", err.message);
+  }
 
-    return appointment;
+  return appointment;
 };
 
 // Cập nhật trạng thái lịch hẹn
 const updateAppointmentStatus = async (appointmentId, newStatus, doctorId) => {
-    const appointment = await appointmentRepository.getAppointmentDetail(appointmentId, doctorId);
+  const appointment = await appointmentRepository.getAppointmentDetail(appointmentId, doctorId);
 
-    if (!appointment) {
-        throw new ApiError(404, "Không tìm thấy lịch hẹn");
-    }
+  if (!appointment) {
+    throw new ApiError(404, "Không tìm thấy lịch hẹn");
+  }
 
-    const currentStatus = appointment.status;
-    if (currentStatus === newStatus) {
-        throw new ApiError(400, `Lịch hẹn đã ở trạng thái '${newStatus}'`);
-    }
+  const currentStatus = appointment.status;
+  if (currentStatus === newStatus) {
+    throw new ApiError(400, `Lịch hẹn đã ở trạng thái '${newStatus}'`);
+  }
 
-    const allowedTransitions = {
-        pending: ["confirmed", "cancelled"],
-        confirmed: ["completed", "missed"],
-        cancelled: [],
-        completed: [],
-        missed: []
-    };
+  const allowedTransitions = {
+    pending: ["confirmed", "cancelled"],
+    confirmed: ["completed", "missed"],
+    cancelled: [],
+    completed: [],
+    missed: [],
+  };
 
-    if (!Object.prototype.hasOwnProperty.call(allowedTransitions, currentStatus)) {
-        throw new ApiError(400, `Trạng thái hiện tại không hợp lệ: '${currentStatus}'`);
-    }
+  if (!Object.prototype.hasOwnProperty.call(allowedTransitions, currentStatus)) {
+    throw new ApiError(400, `Trạng thái hiện tại không hợp lệ: '${currentStatus}'`);
+  }
 
-    if (!allowedTransitions[currentStatus].includes(newStatus)) {
-        throw new ApiError(
-            400,
-            `Không thể chuyển trạng thái từ '${currentStatus}' sang '${newStatus}'`
-        );
-    }
-
-    const slotInfo = appointment.BookableSlot;
-    if (!slotInfo || !slotInfo.id) {
-        throw new ApiError(400, "Lịch hẹn không có thông tin slot");
-    }
-
-    // Cập nhật trạng thái
-    await appointmentRepository.updateAppointmentStatus(appointmentId, newStatus);
-
-    // Slot logic
-    if (newStatus === "cancelled" || newStatus === "missed") {
-        await slotRepository.updateSlotStatus(slotInfo.id, "available");
-        // Hủy/bỏ lỡ → slot trở lại available → xóa cache để hiện slot mới
-        invalidateDoctorCache(slotInfo.doctor_id);
-    }
-
-    // Notification
-    let subject = "";
-    let message = "";
-
-    switch (newStatus) {
-        case "confirmed":
-            subject = "Lịch hẹn đã được xác nhận";
-            message = "Bác sĩ đã xác nhận lịch hẹn của bạn";
-            break;
-        case "cancelled":
-            subject = "Lịch hẹn đã bị hủy";
-            message = "Lịch hẹn của bạn đã bị hủy";
-            break;
-        case "missed":
-            subject = "Bạn đã bỏ lỡ lịch hẹn";
-            message = "Bạn đã không đến buổi khám";
-            break;
-        case "completed":
-            subject = "Buổi khám đã hoàn thành";
-            message = "Buổi khám của bạn đã kết thúc";
-            break;
-    }
-
-    if (!slotInfo.doctor_id) {
-        throw new ApiError(400, "Không tìm thấy bác sĩ để tạo thông báo");
-    }
-
-    await notificationService.createNotification(
-        slotInfo.doctor_id,
-        appointment.patient_id,
-        subject,
-        message
+  if (!allowedTransitions[currentStatus].includes(newStatus)) {
+    throw new ApiError(
+      400,
+      `Không thể chuyển trạng thái từ '${currentStatus}' sang '${newStatus}'`,
     );
+  }
 
-    const updatedAppointment = await appointmentRepository.getAppointmentDetail(
-        appointmentId, doctorId);
+  const slotInfo = appointment.BookableSlot;
+  if (!slotInfo || !slotInfo.id) {
+    throw new ApiError(400, "Lịch hẹn không có thông tin slot");
+  }
 
-    return updatedAppointment;
+  // Cập nhật trạng thái
+  await appointmentRepository.updateAppointmentStatus(appointmentId, newStatus);
+
+  // Slot logic
+  if (newStatus === "cancelled" || newStatus === "missed") {
+    await slotRepository.updateSlotStatus(slotInfo.id, "available");
+    // Hủy/bỏ lỡ → slot trở lại available → xóa cache để hiện slot mới
+    invalidateDoctorCache(slotInfo.doctor_id);
+  }
+
+  // Notification
+  let subject = "";
+  let message = "";
+
+  switch (newStatus) {
+    case "confirmed":
+      subject = "Lịch hẹn đã được xác nhận";
+      message = "Bác sĩ đã xác nhận lịch hẹn của bạn";
+      break;
+    case "cancelled":
+      subject = "Lịch hẹn đã bị hủy";
+      message = "Lịch hẹn của bạn đã bị hủy";
+      break;
+    case "missed":
+      subject = "Bạn đã bỏ lỡ lịch hẹn";
+      message = "Bạn đã không đến buổi khám";
+      break;
+    case "completed":
+      subject = "Buổi khám đã hoàn thành";
+      message = "Buổi khám của bạn đã kết thúc";
+      break;
+  }
+
+  if (!slotInfo.doctor_id) {
+    throw new ApiError(400, "Không tìm thấy bác sĩ để tạo thông báo");
+  }
+
+  await notificationService.createNotification(
+    slotInfo.doctor_id,
+    appointment.patient_id,
+    subject,
+    message,
+  );
+
+  const updatedAppointment = await appointmentRepository.getAppointmentDetail(
+    appointmentId,
+    doctorId,
+  );
+
+  return updatedAppointment;
 };
 
 // Tra cứu lịch hẹn theo appointment_code (công khai, không cần đăng nhập)
 const getAppointmentByCode = async (appointmentCode) => {
-    const appointment = await appointmentRepository.findByAppointmentCode(appointmentCode);
-    if (!appointment) {
-        throw new ApiError(404, `Không tìm thấy lịch hẹn với mã: ${appointmentCode}`);
-    }
-    return appointment;
+  const appointment = await appointmentRepository.findByAppointmentCode(appointmentCode);
+  if (!appointment) {
+    throw new ApiError(404, `Không tìm thấy lịch hẹn với mã: ${appointmentCode}`);
+  }
+  return appointment;
 };
 
 module.exports = {
-    getAppointmentsByDoctorId,
-    getAppointmentDetail,
-    getAppointmentsByStatus,
-    getAppointmentsByDate,
-    createAppointment,
-    updateAppointmentStatus,
-    getAppointmentByCode
+  getAppointmentsByDoctorId,
+  getAppointmentDetail,
+  getAppointmentsByStatus,
+  getAppointmentsByDate,
+  createAppointment,
+  updateAppointmentStatus,
+  getAppointmentByCode,
 };
