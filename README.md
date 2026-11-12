@@ -1,677 +1,831 @@
-# Hệ thống đặt lịch khám bệnh
+# TÌNH HUỐNG VẤN ĐÁP -- HỆ THỐNG ĐẶT LỊCH KHÁM BỆNH
 
-Backend Express 5 + Sequelize/MySQL, frontend React (Vite).
+**Backend:** Express.js 5 -- Sequelize -- MySQL\
+**Frontend:** React (Vite)
 
----
+Tài liệu tổng hợp các tình huống thực tế và câu hỏi có thể gặp khi bảo
+vệ đồ án. Nội dung được gộp từ hai bộ câu hỏi, loại bỏ phần trùng lặp và
+bổ sung các tình huống còn thiếu.
 
-## Cài đặt và chạy
+> Lưu ý: Các đoạn code dưới đây là ví dụ minh họa cách xử lý. Khi trả
+> lời giảng viên, cần đối chiếu với đúng tên hàm, tên file và cách triển
+> khai thực tế trong source code. Không nên khẳng định dự án đã có chức
+> năng nếu mã nguồn chưa triển khai.
 
-### 1. Cơ sở dữ liệu
+## I. Kiến trúc và trách nhiệm từng tầng
 
-Tạo database `datlichkhambenh` trên MySQL (XAMPP), rồi import schema:
+Luồng xử lý tổng quát:
 
-`backend/src/DB/datlichkham.sql`
-
-### 2. Backend
-
-```bash
-cd backend
-copy .env.example .env
-npm install
-npm start
+``` text
+Client → Route (+ Middleware) → Controller → Service → Repository → Model → Database
 ```
 
-API: http://localhost:3000  
-Swagger: http://localhost:3000/api-docs
+  -----------------------------------------------------------------------
+  Thành phần              Vị trí tham khảo        Trách nhiệm
+  ----------------------- ----------------------- -----------------------
+  Route                   `src/routes/`           Khai báo URL, gắn
+                                                  middleware xác thực và
+                                                  kiểm tra dữ liệu
 
-### 3. Frontend
+  Middleware              `src/middlewares/`      Xác thực JWT, validate
+                                                  dữ liệu, giới hạn
+                                                  request, xử lý lỗi
 
-```bash
-cd frontend
-copy .env.example .env
-npm install
-npm run dev
-```
+  Controller              `src/controllers/`      Nhận `req`, lấy dữ liệu
+                                                  cần thiết, gọi Service
+                                                  và trả response
 
-Giao diện: http://localhost:5173 (hoặc cổng Vite in ra).
+  Service                 `src/services/`         Xử lý nghiệp vụ, kiểm
+                                                  tra quyền, transaction
+                                                  và điều phối tác vụ
 
----
+  Repository              `src/repositories/`     Truy vấn, thêm, sửa,
+                                                  xóa dữ liệu bằng
+                                                  Sequelize
 
-## 4. Các tình huống và câu hỏi vấn đáp khi bảo vệ đồ án (Kèm cách giải quyết theo kiến trúc Entity - Repository - Service - Controller - Module)
+  Entity / Model          `src/models/`           Định nghĩa cấu trúc
+                                                  bảng, kiểu dữ liệu và
+                                                  quan hệ
 
-Dưới đây là các tình huống thực tế và câu hỏi nâng cao thường được Giảng viên đặt ra khi đi thi / vấn đáp bài tập lớn, kèm theo phương án giải quyết chi tiết trong mã nguồn theo đúng chuẩn kiến trúc 5 lớp của dự án:
-- **Entity / Model:** Định nghĩa schema, kiểu dữ liệu, quan hệ bảng (Sequelize).
-- **Repository:** Tầng giao tiếp cơ sở dữ liệu (Database Access Object).
-- **Service:** Tầng xử lý logic nghiệp vụ, giao dịch (Transaction), kiểm tra điều kiện, gửi mail, socket, xóa cache.
-- **Controller:** Tiếp nhận `req`, kiểm tra dữ liệu, gọi Service và trả về response JSON qua `res`.
-- **Route / Module:** Khai báo tuyến đường URL, gắn các middleware xác thực, phân quyền và validation.
+  Database                `src/DB/`               Lưu dữ liệu, khóa
+                                                  ngoại, unique, index và
+                                                  bảo đảm toàn vẹn
+  -----------------------------------------------------------------------
 
----
+**Cách nhớ khi vấn đáp:** - Route/Middleware: request có được đi tiếp
+không, dữ liệu có đúng định dạng không? - Controller: nhận request và
+trả response. - Service: quyết định nghiệp vụ có được phép thực hiện
+không. - Repository: truy vấn dữ liệu như thế nào? - Model/Database: dữ
+liệu được cấu trúc và ràng buộc ra sao?
 
-### Tình huống 1: Tranh chấp đồng thời (Race Condition) — Hai bệnh nhân cùng bấm đặt một khung giờ (Slot) tại cùng một tích tắc
+Module là cách nhóm các chức năng theo nghiệp vụ, không phải một tầng xử
+lý độc lập trong luồng trên.
 
-* **Câu hỏi của Giảng viên:** *"Nếu có 2 bệnh nhân cùng mở trang đặt lịch và bấm xác nhận cho cùng một slot khám (ví dụ slot 9:00 - 9:30) tại cùng một miligiây, hệ thống xử lý thế nào để không bị trùng lịch (Double Booking)?"*
-* **Vấn đề kỹ thuật:** Khi đọc dữ liệu đồng thời, cả 2 request đều thấy `slot.status === 'available'`. Nếu không có cơ chế khóa, cả 2 cùng tạo `Appointment` và cùng ghi đè trạng thái slot, dẫn đến xung đột dữ liệu nghiêm trọng.
-* **Cách giải quyết trong code:**
+------------------------------------------------------------------------
 
-#### 1. Entity / Model (`backend/src/models/bookable_slot.js`)
-Định nghĩa trạng thái slot bằng ENUM, đánh chỉ mục (Index) trên `id` và `status`:
-```javascript
-const BookableSlot = sequelize.define("BookableSlot", {
-  doctor_id: { type: DataTypes.INTEGER, allowNull: false },
-  slot_date: { type: DataTypes.DATEONLY, allowNull: false },
-  start_time: { type: DataTypes.TIME, allowNull: false },
-  end_time: { type: DataTypes.TIME, allowNull: false },
-  status: { 
-    type: DataTypes.ENUM("available", "booked", "off"), 
-    defaultValue: "available" 
-  }
-});
-```
+## II. Các tình huống và câu hỏi vấn đáp
 
-#### 2. Repository (`backend/src/repositories/bookable_slot.repository.js`)
-Sử dụng **Atomic Update** (cập nhật nguyên tử) có điều kiện hoặc **Pessimistic Locking** (`lock: transaction.LOCK.UPDATE`):
-```javascript
-// Cập nhật nguyên tử: Chỉ đổi sang booked nếu status hiện tại đúng là 'available'
-const lockAndBookSlotAtomic = async (slotId, transaction) => {
+## Tình huống 1. Hai bệnh nhân cùng đặt một khung giờ (Race Condition)
+
+**Câu hỏi:** Nếu hai bệnh nhân cùng bấm đặt một slot 09:00--09:30 gần
+như đồng thời, làm sao tránh đặt trùng?
+
+**Vấn đề:** Nếu chỉ đọc `status === "available"` rồi mới cập nhật, cả
+hai request có thể cùng đọc được trạng thái `available` và cùng tạo lịch
+hẹn.
+
+**Cách giải quyết:** - Service mở transaction cho toàn bộ thao tác đặt
+lịch. - Repository khóa dòng slot bằng `SELECT ... FOR UPDATE`. - Kiểm
+tra slot còn `available` hay không. - Chỉ cập nhật sang `booked` nếu
+trạng thái hiện tại vẫn là `available`. - Tạo appointment trong cùng
+transaction. Nếu có lỗi thì rollback.
+
+**Repository:**
+
+``` javascript
+const findSlotByIdForUpdate = (id, transaction) =>
+  BookableSlot.findByPk(id, {
+    transaction,
+    lock: transaction.LOCK.UPDATE
+  });
+
+const markSlotBookedIfAvailable = async (id, transaction) => {
   const [affectedRows] = await BookableSlot.update(
     { status: "booked" },
-    { 
-      where: { id: slotId, status: "available" }, 
-      transaction 
+    {
+      where: { id, status: "available" },
+      transaction
     }
   );
-  return affectedRows > 0; // True nếu giành được slot, False nếu đã bị người khác đặt trước
+
+  return affectedRows;
 };
 ```
 
-#### 3. Service (`backend/src/services/appointment.service.js`)
-Mở Sequelize Transaction, thực hiện khóa slot trước khi tạo lịch hẹn:
-```javascript
-const createAppointment = async (data) => {
-  const t = await sequelize.transaction();
-  try {
-    // 1. Giành quyền đặt slot bằng Atomic Update
-    const isSlotLocked = await slotRepository.lockAndBookSlotAtomic(data.bookable_slot_id, t);
-    if (!isSlotLocked) {
-      throw new ApiError(400, "Khung giờ này vừa có người đặt trước, vui lòng chọn khung giờ khác!");
-    }
+**Service minh họa:**
 
-    // 2. Tìm hoặc tạo hồ sơ bệnh nhân
-    let patient = await patientRepository.findOrCreatePatient(data, t);
+``` javascript
+const appointment = await sequelize.transaction(async (t) => {
+  const slot = await slotRepository.findSlotByIdForUpdate(
+    data.bookable_slot_id,
+    t
+  );
 
-    // 3. Tạo cuộc hẹn mới
-    const appointment = await appointmentRepository.createAppointment({
-      bookable_slot_id: data.bookable_slot_id,
-      patient_id: patient.id,
-      reason_for_visit: data.reason_for_visit,
-      status: "pending"
-    }, t);
-
-    await t.commit(); // Ghi nhận thành công vào DB
-
-    // 4. Xóa cache và thông báo sau khi commit thành công
-    invalidateDoctorCache(slot.doctor_id);
-    emitToDoctor(slot.doctor_id, "appointment:new", appointment);
-    return appointment;
-  } catch (error) {
-    await t.rollback();
-    throw error;
+  if (!slot) throw new ApiError(404, "Không tìm thấy khung giờ");
+  if (slot.status !== "available") {
+    throw new ApiError(409, "Khung giờ vừa được đặt hoặc không còn khả dụng");
   }
-};
-```
 
-#### 4. Controller (`backend/src/controllers/appointment.controller.js`)
-```javascript
-const createAppointment = async (req, res, next) => {
-  try {
-    const appointment = await appointmentService.createAppointment(req.body);
-    return response.created(res, appointment, "Đặt lịch khám thành công");
-  } catch (error) {
-    next(error);
+  const affected = await slotRepository.markSlotBookedIfAvailable(slot.id, t);
+  if (affected === 0) {
+    throw new ApiError(409, "Khung giờ vừa được người khác đặt");
   }
-};
-```
 
-#### 5. Route / Module (`backend/src/routes/appointment.route.js`)
-```javascript
-router.post("/create", createAppointmentRules, appointmentController.createAppointment);
-```
-
----
-
-### Tình huống 2: Hủy lịch khám & Hoàn trả Slot tự động (Máy trạng thái FSM & Xóa Cache tức thì)
-
-* **Câu hỏi của Giảng viên:** *"Khi bác sĩ từ chối hoặc bệnh nhân hủy lịch hẹn, làm sao đảm bảo slot khám được mở lại cho bệnh nhân khác đặt ngay lập tức và giao diện không bị cache dữ liệu cũ?"*
-* **Vấn đề kỹ thuật:** Trạng thái cuộc hẹn không được chuyển tùy tiện (ví dụ: đã `completed` thì không thể `cancelled`). Khi hủy, phải hoàn trả slot thành `available` và xóa cache danh sách slot trống trong RAM.
-* **Cách giải quyết trong code:**
-
-#### 1. Entity / Model (`backend/src/models/appointment.js`)
-```javascript
-const Appointment = sequelize.define("Appointment", {
-  appointment_code: { type: DataTypes.STRING, unique: true },
-  status: {
-    type: DataTypes.ENUM("pending", "confirmed", "completed", "cancelled", "missed"),
-    defaultValue: "pending"
-  }
+  return appointmentRepository.createAppointment({
+    ...data,
+    status: "pending"
+  }, t);
 });
 ```
 
-#### 2. Repository (`backend/src/repositories/appointment.repository.js`)
-```javascript
-const updateAppointmentStatus = async (id, status, transaction = null) => {
-  return await Appointment.update({ status }, { where: { id }, transaction });
+**Trả lời ngắn:** Dùng transaction kết hợp khóa dòng `FOR UPDATE` và cập
+nhật có điều kiện. Request thứ hai phải chờ, sau đó kiểm tra lại trạng
+thái nên không thể đặt trùng slot.
+
+## Tình huống 2. Bác sĩ cập nhật trạng thái lịch hẹn tùy ý (Finite State Machine)
+
+**Câu hỏi:** Vì sao không cho client gửi trạng thái bất kỳ? Nếu lịch đã
+`completed` mà client gửi `cancelled` thì sao?
+
+**Cách giải quyết:** Service kiểm tra trạng thái hiện tại và trạng thái
+muốn chuyển đến theo quy tắc nghiệp vụ.
+
+Ví dụ:
+
+``` javascript
+const ALLOWED_TRANSITIONS = {
+  pending: ["confirmed", "cancelled"],
+  confirmed: ["completed", "missed", "cancelled"],
+  cancelled: [],
+  completed: [],
+  missed: []
 };
+
+if (!ALLOWED_TRANSITIONS[appointment.status]?.includes(newStatus)) {
+  throw new ApiError(400, "Không thể chuyển sang trạng thái này");
+}
 ```
 
-#### 3. Service (`backend/src/services/appointment.service.js`)
-Áp dụng mô hình **Finite State Machine (FSM)** kiểm soát luồng chuyển đổi trạng thái:
-```javascript
-const updateAppointmentStatus = async (appointmentId, newStatus, doctorId) => {
-  const appointment = await appointmentRepository.getAppointmentDetail(appointmentId, doctorId);
-  if (!appointment) throw new ApiError(404, "Không tìm thấy lịch hẹn");
+-   Route/express-validator chỉ kiểm tra `status` có thuộc danh sách hợp
+    lệ hay không.
+-   Service kiểm tra chuyển đổi trạng thái có hợp lệ theo nghiệp vụ
+    không.
+-   Repository thực hiện cập nhật dữ liệu.
 
-  const allowedTransitions = {
-    pending: ["confirmed", "cancelled"],
-    confirmed: ["completed", "missed"],
-    cancelled: [],
-    completed: [],
-    missed: []
-  };
+**Trả lời ngắn:** Client chỉ gửi trạng thái muốn cập nhật. Service mới
+là nơi quyết định trạng thái đó có được phép chuyển hay không.
 
-  if (!allowedTransitions[appointment.status]?.includes(newStatus)) {
-    throw new ApiError(400, `Không thể chuyển từ trạng thái '${appointment.status}' sang '${newStatus}'`);
+## Tình huống 3. Hủy lịch hẹn và mở lại slot
+
+**Câu hỏi:** Khi bệnh nhân hủy lịch, làm sao mở lại slot cho người khác?
+Nếu cập nhật appointment thành công nhưng cập nhật slot thất bại thì
+sao?
+
+**Cách giải quyết:** Cập nhật appointment và slot trong cùng
+transaction. Nếu một thao tác thất bại thì rollback cả hai.
+
+``` javascript
+await sequelize.transaction(async (t) => {
+  const appointment = await appointmentRepository
+    .getAppointmentDetail(appointmentId, t);
+
+  if (!appointment) {
+    throw new ApiError(404, "Không tìm thấy lịch hẹn");
   }
 
-  // Cập nhật trạng thái cuộc hẹn
-  await appointmentRepository.updateAppointmentStatus(appointmentId, newStatus);
+  // Kiểm tra trạng thái hiện tại trước khi hủy
+  await appointmentRepository.updateAppointmentStatus(
+    appointmentId,
+    "cancelled",
+    t
+  );
 
-  // Nếu hủy hoặc bỏ lỡ: Mở lại khung giờ khám cho bệnh nhân khác
-  if (newStatus === "cancelled" || newStatus === "missed") {
-    await slotRepository.updateSlotStatus(appointment.bookable_slot_id, "available");
-    // Xóa cache RAM ngay lập tức để người khác thấy lại slot trống
-    invalidateDoctorCache(appointment.BookableSlot.doctor_id);
+  await slotRepository.updateSlotStatus(
+    appointment.bookable_slot_id,
+    "available",
+    t
+  );
+});
+```
+
+Sau khi transaction thành công, xóa cache liên quan để giao diện cập
+nhật slot mới.
+
+**Trả lời ngắn:** Appointment và slot phải được cập nhật trong cùng
+transaction để tránh trường hợp lịch đã hủy nhưng slot vẫn bị khóa.
+
+## Tình huống 4. Bác sĩ A xem hoặc sửa lịch của bác sĩ B (Authorization)
+
+**Câu hỏi:** Bác sĩ đã đăng nhập có thể xem tất cả lịch hẹn không? Làm
+sao kiểm tra lịch thuộc bác sĩ nào?
+
+**Cách giải quyết:** - Route dùng `authMiddleware` để xác thực người
+dùng. - Controller lấy `doctorId` từ `req.user.id`, không tin
+`doctor_id` do client gửi. - Repository lọc lịch thông qua quan hệ
+`appointment.bookable_slot_id` → `bookable_slot.doctor_id`. - Service
+kiểm tra quyền sở hữu và trả lỗi phù hợp.
+
+``` javascript
+const appointment = await appointmentRepository.getAppointmentDetail(
+  appointmentId,
+  doctorId
+);
+
+if (!appointment) {
+  throw new ApiError(404, "Không tìm thấy lịch hẹn");
+}
+```
+
+Nếu cần phân biệt lịch không tồn tại và lịch thuộc bác sĩ khác, có thể
+truy vấn thêm theo ID để trả 404 hoặc 403 phù hợp.
+
+**Trả lời ngắn:** Đăng nhập không đồng nghĩa với có quyền xem mọi dữ
+liệu. Phải lọc lịch theo `doctor_id` lấy từ token.
+
+## Tình huống 5. Dữ liệu đầu vào thiếu, sai định dạng hoặc ngày khám trong quá khứ
+
+**Câu hỏi:** Nếu client không gửi `bookable_slot_id`, gửi số điện thoại
+sai hoặc chọn ngày khám đã qua thì xử lý ở đâu?
+
+**Cách giải quyết:** Chia thành hai nhóm kiểm tra:
+
+1.  **Route/Middleware:** kiểm tra dữ liệu đầu vào như trường bắt buộc,
+    kiểu dữ liệu, email, số điện thoại.
+2.  **Service:** kiểm tra điều kiện nghiệp vụ như slot tồn tại, slot còn
+    trống, ngày giờ khám chưa qua.
+
+Ví dụ validate:
+
+``` javascript
+body("bookable_slot_id").notEmpty().isInt({ min: 1 });
+body("phone_number").notEmpty();
+body("patient_name").notEmpty();
+```
+
+Ví dụ kiểm tra ngày trong Service:
+
+``` javascript
+if (slot.slot_date < today) {
+  throw new ApiError(400, "Không thể đặt lịch trong quá khứ");
+}
+```
+
+**Trả lời ngắn:** Middleware kiểm tra định dạng dữ liệu; Service kiểm
+tra điều kiện nghiệp vụ.
+
+## Tình huống 6. Bác sĩ A không được đặt lịch thay cho bác sĩ B bằng cách gửi `doctor_id`
+
+**Câu hỏi:** Nếu client tự sửa request và gửi `doctor_id` của bác sĩ
+khác thì sao?
+
+**Cách giải quyết:** Không lấy `doctor_id` từ body để quyết định bác sĩ
+của lịch hẹn. Hệ thống phải truy vấn slot theo `bookable_slot_id`, sau
+đó lấy `doctor_id` từ bản ghi slot trong database.
+
+``` javascript
+const slot = await slotRepository.findById(data.bookable_slot_id);
+
+if (!slot) throw new ApiError(404, "Không tìm thấy khung giờ");
+
+const doctorId = slot.doctor_id;
+```
+
+**Trả lời ngắn:** Bác sĩ phụ trách được xác định từ slot trong database,
+không tin `doctor_id` do client gửi lên.
+
+## Tình huống 7. Mã lịch hẹn bị trùng (Unique Constraint)
+
+**Câu hỏi:** Nếu hai lịch hẹn được tạo cùng lúc và sinh ra cùng
+`appointment_code` thì sao?
+
+**Cách giải quyết:** - Tạo mã lịch hẹn theo cách hạn chế trùng, ví dụ
+dựa trên ID sau khi insert hoặc dùng mã ngẫu nhiên đủ dài. - Đặt ràng
+buộc `UNIQUE` cho cột `appointment_code` trong database. - Nếu phát sinh
+lỗi trùng mã, xử lý và tạo lại mã theo thiết kế.
+
+Ví dụ:
+
+``` javascript
+appointment_code: {
+  type: DataTypes.STRING,
+  unique: true
+}
+```
+
+**Trả lời ngắn:** Không chỉ kiểm tra trùng ở code. Cần có ràng buộc
+UNIQUE ở database để bảo vệ dữ liệu.
+
+## Tình huống 8. Gửi email hoặc Socket thất bại sau khi tạo lịch
+
+**Câu hỏi:** Nếu lưu lịch hẹn thành công nhưng Gmail hoặc Socket bị lỗi
+thì lịch có bị hủy không?
+
+**Cách giải quyết:** - Transaction chỉ bao gồm các thao tác dữ liệu cốt
+lõi: khóa slot, tạo bệnh nhân và tạo appointment. - Commit transaction
+trước. - Email, Socket và thông báo là tác vụ phụ, xử lý riêng sau
+commit. - Nếu gửi thất bại thì ghi log hoặc đưa vào hàng đợi để thử gửi
+lại; không rollback lịch đã tạo.
+
+``` javascript
+const appointment = await sequelize.transaction(async (t) => {
+  // Khóa slot và tạo appointment trong transaction
+  return appointmentRepository.createAppointment(data, t);
+});
+
+// Tác vụ phụ sau commit
+try {
+  await sendMail(email, subject, html);
+} catch (error) {
+  console.error("Gửi email thất bại:", error.message);
+}
+
+return appointment;
+```
+
+**Trả lời ngắn:** Email/Socket không phải dữ liệu cốt lõi của việc đặt
+lịch. Lỗi thông báo không được làm mất lịch hẹn đã lưu thành công.
+
+## Tình huống 9. Danh sách có nhiều dữ liệu -- phân trang và lọc
+
+**Câu hỏi:** Nếu hệ thống có hàng nghìn hoặc hàng triệu lịch hẹn, có nên
+lấy toàn bộ dữ liệu rồi trả về frontend không?
+
+**Cách giải quyết:** - Phân trang bằng `limit` và `offset`. - Lọc theo
+trạng thái, ngày khám ngay trong truy vấn database. - Chỉ lấy các trường
+cần thiết. - Giới hạn `limit` tối đa để client không yêu cầu quá nhiều
+dữ liệu.
+
+``` javascript
+const page = Math.max(Number(query.page) || 1, 1);
+const limit = Math.min(Math.max(Number(query.limit) || 10, 1), 50);
+const offset = (page - 1) * limit;
+
+const result = await Appointment.findAndCountAll({
+  where: query.status ? { status: query.status } : {},
+  limit,
+  offset,
+  order: [["id", "DESC"]],
+  distinct: true
+});
+```
+
+**Trả lời ngắn:** Phân trang và lọc ngay tại database giúp giảm dữ liệu
+trả về, giảm tải server và tăng tốc độ phản hồi.
+
+## Tình huống 10. Bác sĩ nghỉ ngày hoặc tắt mẫu lịch khi đã có người đặt
+
+**Câu hỏi:** Nếu bác sĩ đăng ký nghỉ một ngày nhưng đã có bệnh nhân đặt
+lịch thì hệ thống xử lý thế nào?
+
+**Cách giải quyết an toàn:** - Chỉ chuyển các slot `available` sang
+`off`. - Không xóa slot `booked`. - Không tự động hủy các appointment đã
+có người đặt nếu chưa có quy trình xử lý và xác nhận riêng. - Trả về
+danh sách hoặc số lượng lịch bị ảnh hưởng để bác sĩ/bộ phận phụ trách xử
+lý riêng. - Nếu tắt mẫu lịch, cần kiểm tra slot đã đặt trước khi xóa;
+tránh xóa dây chuyền làm mất lịch hẹn.
+
+``` javascript
+await BookableSlot.update(
+  { status: "off" },
+  {
+    where: {
+      doctor_id: doctorId,
+      slot_date: leaveDate,
+      status: "available"
+    },
+    transaction: t
   }
-
-  // Gửi thông báo realtime qua Socket.io
-  emitToDoctor(doctorId, "appointment:status_changed", { appointmentId, newStatus });
-  return { id: appointmentId, status: newStatus };
-};
+);
 ```
 
-#### 4. Controller (`backend/src/controllers/appointment.controller.js`)
-```javascript
-const updateAppointmentStatus = async (req, res, next) => {
-  try {
-    const { id } = req.params;
-    const { status } = req.body;
-    const doctorId = req.user.id;
-    const result = await appointmentService.updateAppointmentStatus(id, status, doctorId);
-    return response.success(res, result, "Cập nhật trạng thái lịch hẹn thành công");
-  } catch (error) {
-    next(error);
-  }
-};
-```
+Nếu cần hủy lịch đã đặt, phải có nghiệp vụ riêng: xác định các
+appointment bị ảnh hưởng, cập nhật trạng thái hợp lệ trong transaction,
+lưu lý do và thông báo cho bệnh nhân sau commit.
 
-#### 5. Route / Module (`backend/src/routes/appointment.route.js`)
-```javascript
-router.patch("/:id/status", authMiddleware, appointmentController.updateAppointmentStatus);
-```
+**Trả lời ngắn:** Chỉ tắt slot chưa có người đặt. Slot `booked` và lịch
+hẹn hiện có phải được giữ lại để xử lý riêng, tránh làm mất lịch của
+bệnh nhân.
 
----
+## Tình huống 11. Token hết hạn hoặc đăng nhập trên thiết bị khác
 
-### Tình huống 3: Thu hồi Token tức thì khi Đăng xuất / Đổi mật khẩu trong kiến trúc JWT Stateless (Single Active Session)
+**Câu hỏi:** JWT hết hạn thì hệ thống xử lý thế nào? Nếu bác sĩ đăng
+nhập trên máy khác thì token cũ có còn sử dụng được không?
 
-* **Câu hỏi của Giảng viên:** *"JWT là Stateless, không lưu session trong database. Vậy nếu bác sĩ bấm Đăng xuất hoặc Đổi mật khẩu trên điện thoại, làm sao ngăn chặn kẻ gian lấy được token cũ trên máy tính tiếp tục gọi API?"*
-* **Vấn đề kỹ thuật:** Token JWT có hạn dùng (ví dụ 24h) và không thể bị sửa đổi sau khi đã ký. Nếu không có cơ chế thu hồi (Revocation), token cũ vẫn có hiệu lực cho đến khi hết hạn.
-* **Cách giải quyết trong code:**
+**Cách giải quyết:** - JWT được ký với thời gian hết hạn, ví dụ
+`expiresIn: "24h"`. - Middleware dùng `jwt.verify()` để kiểm tra chữ ký
+và thời hạn. - Nếu token hết hạn hoặc không hợp lệ, trả về 401. - Nếu dự
+án chỉ cho phép một phiên đăng nhập, có thể lưu token đang hoạt động
+theo user và từ chối token cũ.
 
-#### 1. In-Memory Store Layer (`backend/src/utils/tokenBlacklist.js` & `tokenStore.js`)
-Xây dựng cơ chế lưu trữ danh sách đen và quản lý phiên đơn (Single Session) trong RAM với TTL tự động dọn dẹp:
-```javascript
-// tokenBlacklist.js: Danh sách token đã đăng xuất / bị thu hồi
+**Trả lời ngắn:** Middleware xác thực token ở mỗi request. Token hết hạn
+hoặc không hợp lệ sẽ bị từ chối; chính sách một phiên cần thêm cơ chế
+lưu phiên đang hoạt động.
+
+## Tình huống 12. Thu hồi token ngay khi đăng xuất hoặc đổi mật khẩu
+
+**Câu hỏi:** JWT là stateless, vậy sau khi đăng xuất hoặc đổi mật khẩu
+làm sao ngăn token cũ tiếp tục gọi API?
+
+**Cách giải quyết:** Có thể dùng blacklist hoặc cơ chế version/session
+để thu hồi token. Với blacklist, middleware kiểm tra token đã bị thu hồi
+trước khi cho request đi tiếp.
+
+Ví dụ minh họa trong RAM:
+
+``` javascript
 const blacklist = new Set();
 
 const addToBlacklist = (token) => {
   blacklist.add(token);
-  // Tự động giải phóng bộ nhớ khi token hết hạn 24h
-  setTimeout(() => blacklist.delete(token), 24 * 60 * 60 * 1000);
 };
 
 const isBlacklisted = (token) => blacklist.has(token);
-
-// tokenStore.js: Quản lý phiên đơn (Chỉ cho phép 1 phiên hoạt động cùng thời điểm)
-const userTokens = new Map(); // doctorId -> activeToken
-
-const setActiveToken = (doctorId, token) => {
-  const oldToken = userTokens.get(doctorId);
-  if (oldToken) addToBlacklist(oldToken); // Vô hiệu hóa token phiên cũ ngay lập tức
-  userTokens.set(doctorId, token);
-};
 ```
 
-#### 2. Service (`backend/src/services/auth.service.js`)
-```javascript
-const loginDoctor = async (email, password) => {
-  const doctor = await doctorRepository.findDoctorByEmail(email);
-  if (!doctor || !(await bcrypt.compare(password, doctor.password))) {
-    throw new ApiError(401, "Email hoặc mật khẩu không chính xác");
-  }
+Middleware:
 
-  const token = jwt.sign({ id: doctor.id, role: "doctor" }, env.jwtSecret, { expiresIn: "24h" });
-  setActiveToken(doctor.id, token); // Kích hoạt phiên mới, thu hồi phiên cũ
-  return { token, doctor };
-};
-
-const logoutDoctor = async (token, doctorId) => {
-  addToBlacklist(token); // Đưa token hiện tại vào blacklist
-  userTokens.delete(doctorId);
-};
-
-const changePassword = async (doctorId, token, oldPassword, newPassword) => {
-  const doctor = await doctorRepository.findDoctorById(doctorId);
-  if (!(await bcrypt.compare(oldPassword, doctor.password))) {
-    throw new ApiError(400, "Mật khẩu cũ không chính xác");
-  }
-  const hashedPassword = await bcrypt.hash(newPassword, 10);
-  await doctorRepository.updatePassword(doctorId, hashedPassword);
-
-  // Đổi pass thành công -> Thu hồi token hiện tại bắt đăng nhập lại
-  addToBlacklist(token);
-};
+``` javascript
+if (isBlacklisted(token)) {
+  return next(new ApiError(401, "Phiên làm việc đã bị thu hồi"));
+}
 ```
 
-#### 3. Middleware (`backend/src/middlewares/auth.middleware.js`)
-Kiểm tra token có nằm trong Blacklist trước khi cho phép đi vào Controller:
-```javascript
-const authMiddleware = (req, res, next) => {
-  const authHeader = req.headers.authorization;
-  if (!authHeader?.startsWith("Bearer ")) {
-    return next(new ApiError(401, "Yêu cầu đăng nhập"));
-  }
-  const token = authHeader.split(" ")[1];
+Khi logout hoặc đổi mật khẩu thành công, đưa token hiện tại vào
+blacklist. Nếu muốn thu hồi tất cả token của người dùng, cần cơ chế quản
+lý phiên hoặc token version theo user.
 
-  // 1. Kiểm tra Blacklist
-  if (isBlacklisted(token)) {
-    return next(new ApiError(401, "Phiên làm việc đã hết hạn hoặc đã đăng xuất"));
-  }
+**Lưu ý:** Lưu blacklist bằng `Set` trong RAM chỉ phù hợp minh họa hoặc
+hệ thống chạy một tiến trình. Dữ liệu sẽ mất khi restart và không đồng
+bộ giữa nhiều server. Hệ thống triển khai thực tế nên dùng Redis hoặc
+database có TTL/cơ chế quản lý phiên.
 
-  // 2. Xác thực JWT
-  try {
-    const decoded = jwt.verify(token, env.jwtSecret);
-    req.user = decoded;
-    req.token = token;
-    next();
-  } catch (err) {
-    return next(new ApiError(401, "Token không hợp lệ hoặc đã hết hạn"));
-  }
-};
-```
+**Trả lời ngắn:** JWT tự nó không thu hồi được sau khi phát hành. Cần
+blacklist hoặc quản lý phiên/token version để middleware từ chối token
+đã bị thu hồi.
 
-#### 4. Controller (`backend/src/controllers/auth.controller.js`)
-```javascript
-const logout = async (req, res, next) => {
-  try {
-    await authService.logoutDoctor(req.token, req.user.id);
-    return response.success(res, null, "Đăng xuất thành công");
-  } catch (error) {
-    next(error);
-  }
-};
-```
+## Tình huống 13. Chống spam đặt lịch (Rate Limiting)
 
-#### 5. Route / Module (`backend/src/routes/auth.route.js`)
-```javascript
-router.post("/login", loginRules, authController.loginDoctor);
-router.post("/logout", authMiddleware, authController.logout);
-router.post("/change-password", authMiddleware, changePasswordRules, authController.changePassword);
-```
+**Câu hỏi:** Nếu người dùng viết script gọi API đặt lịch hàng trăm lần
+thì hệ thống ngăn chặn thế nào?
 
----
+**Cách giải quyết:** - Giới hạn số request theo IP trong một khoảng thời
+gian. - Có thể kiểm tra thêm số lịch `pending` hoặc `confirmed` theo số
+điện thoại. - Đặt middleware rate limit trước controller.
 
-### Tình huống 4: Bác sĩ xin nghỉ đột xuất (Doctor Emergency Leave) và xử lý tự động các lịch hẹn đã đặt
+Ví dụ minh họa:
 
-* **Câu hỏi của Giảng viên:** *"Nếu ngày mai bác sĩ có việc đột xuất đăng ký nghỉ phép toàn bộ ngày, hệ thống xử lý các khung giờ khám và các cuộc hẹn đã có người đặt như thế nào?"*
-* **Vấn đề kỹ thuật:** Phải vô hiệu hóa toàn bộ slot của bác sĩ trong ngày đó (`status = 'off'`), đồng thời tự động hủy các lịch hẹn đã đặt kèm theo lý do, thông báo cho bệnh nhân qua email và hoàn trả trạng thái.
-* **Cách giải quyết trong code:**
-
-#### 1. Entity / Model (`backend/src/models/doctor_availability.js` & `bookable_slot.js`)
-Slot khám có `status: 'off'`, Bác sĩ đăng ký ngày nghỉ trong bảng `doctor_availability` hoặc cập nhật trạng thái slot.
-
-#### 2. Repository (`backend/src/repositories/bookable_slot.repository.js`)
-```javascript
-const findSlotsByDoctorAndDate = async (doctorId, slotDate, transaction) => {
-  return await BookableSlot.findAll({
-    where: { doctor_id: doctorId, slot_date: slotDate },
-    transaction
-  });
-};
-
-const updateSlotsStatusByDate = async (doctorId, slotDate, status, transaction) => {
-  return await BookableSlot.update(
-    { status },
-    { where: { doctor_id: doctorId, slot_date: slotDate }, transaction }
-  );
-};
-```
-
-#### 3. Service (`backend/src/services/doctor_availability.service.js`)
-```javascript
-const registerDayOff = async (doctorId, leaveDate, reason) => {
-  const t = await sequelize.transaction();
-  try {
-    // 1. Tìm tất cả slot của bác sĩ trong ngày nghỉ
-    const slots = await slotRepository.findSlotsByDoctorAndDate(doctorId, leaveDate, t);
-    const slotIds = slots.map(s => s.id);
-
-    // 2. Chuyển toàn bộ slot sang trạng thái 'off'
-    await slotRepository.updateSlotsStatusByDate(doctorId, leaveDate, "off", t);
-
-    // 3. Tìm các lịch hẹn đã được đặt trên các slot này
-    const affectedAppointments = await appointmentRepository.findAppointmentsBySlotIds(slotIds, t);
-
-    // 4. Hủy các lịch hẹn và ghi nhận lý do bác sĩ nghỉ
-    for (const app of affectedAppointments) {
-      if (app.status === "pending" || app.status === "confirmed") {
-        await appointmentRepository.updateAppointmentStatus(app.id, "cancelled", t);
-        // Gửi email xin lỗi bệnh nhân (chạy background sau commit)
-        sendLeaveApologyEmail(app.Patient.email, app.appointment_code, leaveDate, reason);
-      }
-    }
-
-    await t.commit();
-    invalidateDoctorCache(doctorId); // Xóa cache ngày khám và slot
-    return { success: true, cancelledCount: affectedAppointments.length };
-  } catch (error) {
-    await t.rollback();
-    throw error;
-  }
-};
-```
-
-#### 4. Controller (`backend/src/controllers/doctor_availability.controller.js`)
-```javascript
-const registerDayOff = async (req, res, next) => {
-  try {
-    const { date, reason } = req.body;
-    const result = await doctorAvailabilityService.registerDayOff(req.user.id, date, reason);
-    return response.success(res, result, "Đăng ký ngày nghỉ thành công và đã xử lý các lịch hẹn liên quan");
-  } catch (error) {
-    next(error);
-  }
-};
-```
-
-#### 5. Route / Module (`backend/src/routes/doctor_availability.route.js`)
-```javascript
-router.post("/day-off", authMiddleware, dayOffRules, doctorAvailabilityController.registerDayOff);
-```
-
----
-
-### Tình huống 5: Chống Spam đặt lịch ảo và Tấn công từ chối dịch vụ (Rate Limiting & Phone Spam Check)
-
-* **Câu hỏi của Giảng viên:** *"Bệnh nhân không cần đăng nhập vẫn đặt được lịch khám qua số điện thoại. Làm sao ngăn chặn trường hợp một đối tượng viết script tự động gọi API spam hàng trăm cuộc hẹn ảo để phá hoại?"*
-* **Vấn đề kỹ thuật:** API công khai (`public endpoint`) rất dễ bị spam. Cần kiểm soát theo 2 lớp: Tầng mạng (Rate Limiting theo IP) và Tầng nghiệp vụ (Kiểm tra giới hạn số lịch hẹn chưa hoàn tất của cùng một số điện thoại).
-* **Cách giải quyết trong code:**
-
-#### 1. Middleware Layer: Giới hạn tần suất gọi API (`backend/src/middlewares/rateLimiter.js`)
-Tự xây dựng bộ đếm sliding window trong RAM hoặc sử dụng middleware:
-```javascript
-const requestCounts = new Map(); // IP -> { count, resetTime }
+``` javascript
+const requestCounts = new Map();
 
 const appointmentRateLimiter = (req, res, next) => {
-  const ip = req.ip || req.connection.remoteAddress;
+  const ip = req.ip;
   const now = Date.now();
-  const windowMs = 60 * 1000; // 1 phút
-  const maxRequests = 5;       // Tối đa 5 lần đặt lịch / phút / 1 IP
+  const windowMs = 60 * 1000;
+  const maxRequests = 5;
 
-  const record = requestCounts.get(ip) || { count: 0, resetTime: now + windowMs };
+  let record = requestCounts.get(ip);
 
-  if (now > record.resetTime) {
-    record.count = 1;
-    record.resetTime = now + windowMs;
+  if (!record || now > record.resetTime) {
+    record = { count: 1, resetTime: now + windowMs };
   } else {
-    record.count++;
+    record.count += 1;
   }
 
   requestCounts.set(ip, record);
 
   if (record.count > maxRequests) {
-    return next(new ApiError(429, "Bạn thao tác quá nhanh, vui lòng thử lại sau 1 phút!"));
+    return next(new ApiError(429, "Bạn thao tác quá nhanh, vui lòng thử lại sau"));
   }
+
   next();
 };
 ```
 
-#### 2. Repository Layer (`backend/src/repositories/appointment.repository.js`)
-```javascript
-const countActiveAppointmentsByPhone = async (phoneNumber) => {
-  return await Appointment.count({
-    include: [{
-      model: Patient,
-      where: { phone_number: phoneNumber }
-    }],
-    where: {
-      status: ["pending", "confirmed"]
-    }
-  });
-};
-```
+Gắn vào route:
 
-#### 3. Service Layer (`backend/src/services/appointment.service.js`)
-Kiểm tra nghiệp vụ trước khi tạo lịch:
-```javascript
-// Trong createAppointment:
-const activeCount = await appointmentRepository.countActiveAppointmentsByPhone(data.phone_number);
-if (activeCount >= 3) {
-  throw new ApiError(400, "Số điện thoại này hiện có 3 lịch hẹn đang chờ khám. Vui lòng hoàn thành buổi khám trước khi đặt thêm!");
-}
-```
-
-#### 4. Route / Module (`backend/src/routes/appointment.route.js`)
-Gắn middleware chặn rate limit trước validation và controller:
-```javascript
+``` javascript
 router.post(
-  "/create", 
-  appointmentRateLimiter,     // 1. Chặn spam theo IP
-  createAppointmentRules,     // 2. Validate dữ liệu
-  appointmentController.createAppointment // 3. Thực thi nghiệp vụ
+  "/create",
+  appointmentRateLimiter,
+  createAppointmentRules,
+  appointmentController.createAppointment
 );
 ```
 
----
+**Lưu ý:** Bộ đếm `Map` trong RAM chỉ mang tính minh họa; production nên
+dùng giải pháp rate limit có store dùng chung nếu chạy nhiều instance.
+Cần cấu hình `trust proxy` đúng nếu ứng dụng chạy sau reverse proxy.
 
-### Tình huống 6: Tìm kiếm, lọc và phân trang dữ liệu lớn kết hợp Caching trong RAM (Pagination & Cache Invalidation)
+**Trả lời ngắn:** Dùng Rate Limiting để giới hạn request theo IP và có
+thể kết hợp kiểm tra số lịch đang hoạt động theo số điện thoại.
 
-* **Câu hỏi của Giảng viên:** *"Khi dữ liệu cuộc hẹn lên tới hàng triệu dòng, truy vấn danh sách lịch hẹn của bác sĩ thế nào để không làm nghẽn cơ sở dữ liệu và tốc độ phản hồi nhanh nhất?"*
-* **Vấn đề kỹ thuật:** Truy vấn `SELECT *` không phân trang sẽ gây tràn RAM (Out of Memory). Không đánh Index sẽ gây Full Table Scan (quét toàn bộ ổ cứng). Cần kết hợp: Database Indexing + Phân trang (`limit`, `offset`) + Cache RAM.
-* **Cách giải quyết trong code:**
+## Tình huống 14. Xóa cache sau khi đặt hoặc hủy lịch
 
-#### 1. Entity / Model (`backend/src/models/appointment.js`)
-Tạo **Composite Index** (chỉ mục kết hợp) trong migration / schema:
-```sql
-ALTER TABLE `appointment` ADD INDEX `idx_doctor_slot_status` (`bookable_slot_id`, `status`);
+**Câu hỏi:** Nếu hệ thống cache danh sách slot trống, sau khi có người
+đặt hoặc hủy lịch thì làm sao tránh hiển thị dữ liệu cũ?
+
+**Cách giải quyết:** - Sau khi transaction đặt lịch thành công, xóa
+cache slot của bác sĩ/ngày liên quan. - Sau khi hủy lịch thành công và
+mở lại slot, cũng xóa cache. - Không xóa cache trước khi transaction
+commit, tránh trường hợp transaction rollback nhưng cache đã bị xóa
+không cần thiết.
+
+``` javascript
+await sequelize.transaction(async (t) => {
+  // Cập nhật appointment và slot
+});
+
+// Chỉ xóa cache sau khi transaction thành công
+invalidateDoctorCache(doctorId);
 ```
 
-#### 2. Repository (`backend/src/repositories/appointment.repository.js`)
-Sử dụng `findAndCountAll` với phân trang và chỉ chọn các trường cần thiết:
-```javascript
-const getAppointmentsPaginated = async (doctorId, { page = 1, limit = 10, status, date }) => {
-  const offset = (page - 1) * limit;
-  const whereCondition = {};
-  if (status) whereCondition.status = status;
+**Trả lời ngắn:** Xóa cache sau khi dữ liệu database được commit để
+frontend lấy được trạng thái slot mới nhất.
 
-  return await Appointment.findAndCountAll({
-    where: whereCondition,
-    include: [{
-      model: BookableSlot,
-      where: { 
-        doctor_id: doctorId,
-        ...(date ? { slot_date: date } : {})
-      }
-    }, {
-      model: Patient,
-      attributes: ["id", "full_name", "phone_number"] // Chỉ lấy trường cần dùng
-    }],
-    limit: parseInt(limit),
-    offset: parseInt(offset),
-    order: [["id", "DESC"]]
-  });
-};
-```
+## Tình huống 15. Optimistic Locking và Pessimistic Locking khác nhau thế nào?
 
-#### 3. Service Layer (`backend/src/services/appointment.service.js`)
-Tích hợp Cache RAM với cơ chế tạo key tự động và TTL:
-```javascript
-const getAppointmentsWithCache = async (doctorId, query) => {
-  const cacheKey = `appointments:doc:${doctorId}:page:${query.page || 1}:status:${query.status || 'all'}`;
-  
-  // Kiểm tra cache RAM
-  const cachedData = cache.get(cacheKey);
-  if (cachedData) return cachedData;
+**Câu hỏi:** Hai cách khóa dữ liệu này khác nhau ra sao? Đồ án nên dùng
+cách nào khi hai người đặt cùng slot?
 
-  // Nếu cache miss: Truy vấn CSDL
-  const result = await appointmentRepository.getAppointmentsPaginated(doctorId, query);
-  
-  // Lưu cache 60 giây
-  cache.set(cacheKey, result, 60);
-  return result;
-};
-```
+**Cách giải quyết:** - **Pessimistic Locking:** khóa dòng dữ liệu khi
+transaction đang xử lý, ví dụ `SELECT ... FOR UPDATE`. Request khác phải
+chờ khóa được giải phóng. - **Optimistic Locking:** không khóa ngay từ
+đầu, dùng cột version hoặc điều kiện cập nhật để phát hiện dữ liệu đã bị
+thay đổi.
 
-#### 4. Controller (`backend/src/controllers/appointment.controller.js`)
-```javascript
-const getAppointments = async (req, res, next) => {
-  try {
-    const data = await appointmentService.getAppointmentsWithCache(req.user.id, req.query);
-    return response.success(res, data, "Lấy danh sách lịch hẹn thành công");
-  } catch (error) {
-    next(error);
+Với tình huống hai người cùng đặt một slot, có thể dùng Pessimistic
+Locking kết hợp transaction trong MySQL/InnoDB.
+
+**Trả lời ngắn:** Pessimistic Locking khóa dòng khi xử lý; Optimistic
+Locking kiểm tra xung đột khi cập nhật. Với đặt slot, `FOR UPDATE` là
+cách dễ giải thích và phù hợp cho tình huống tranh chấp.
+
+## Tình huống 16. Vì sao không đặt UNIQUE cho `appointment.bookable_slot_id`?
+
+**Câu hỏi:** Nếu một slot chỉ được một bệnh nhân đặt, tại sao không đặt
+UNIQUE cho `bookable_slot_id` trong bảng appointment?
+
+**Giải thích:** Nếu hệ thống lưu lại các lịch đã hủy để phục vụ lịch sử,
+nhiều dòng appointment có thể cùng tham chiếu một slot qua các lần đặt
+khác nhau. Đặt UNIQUE trực tiếp sẽ ngăn việc tạo lịch mới sau khi lịch
+cũ đã hủy.
+
+Có thể quản lý trạng thái đặt chỗ ở bảng `bookable_slot`, kết hợp
+transaction và cập nhật có điều kiện. Ràng buộc cụ thể cần phù hợp với
+thiết kế dữ liệu thực tế.
+
+**Trả lời ngắn:** Vì lịch đã hủy vẫn có thể được lưu để tra cứu lịch sử.
+Không nên đặt UNIQUE đơn giản trên `bookable_slot_id` nếu thiết kế cho
+phép đặt lại slot sau khi hủy.
+
+## Tình huống 17. Không tìm thấy dữ liệu: trả 404 hay 200 với mảng rỗng?
+
+**Câu hỏi:** Khi bác sĩ chưa có lịch hẹn nào, API nên trả 404 hay trả
+danh sách rỗng?
+
+**Cách giải quyết:** - Với API lấy danh sách, thường trả `200 OK` và
+mảng rỗng nếu không có dữ liệu. - Với API lấy chi tiết một bản ghi theo
+ID, nếu không tồn tại thì trả `404 Not Found`.
+
+Ví dụ danh sách:
+
+``` json
+{
+  "success": true,
+  "data": [],
+  "pagination": {
+    "page": 1,
+    "limit": 10,
+    "total": 0,
+    "totalPages": 0
   }
-};
+}
 ```
 
-#### 5. Route / Module (`backend/src/routes/appointment.route.js`)
-```javascript
-router.get("/", authMiddleware, appointmentController.getAppointments);
-```
+**Trả lời ngắn:** Danh sách không có dữ liệu thì trả 200 với mảng rỗng;
+truy vấn một bản ghi không tồn tại thì trả 404.
 
----
+## Tình huống 18. Thứ tự khai báo Route trong Express
 
-### Tình huống 7: Tính toàn vẹn dữ liệu khi gửi Email / Socket thất bại (Tách biệt Transaction & Asynchronous Failure Handling)
+**Câu hỏi:** Vì sao route cụ thể như `/code/:code` nên đặt trước route
+động `/:id`?
 
-* **Câu hỏi của Giảng viên:** *"Trong hàm đặt lịch hẹn, nếu lưu DB thành công nhưng khi gọi dịch vụ gửi Gmail thông báo bị rớt mạng (Timeout / SMTP Auth Error), thì lịch hẹn có bị hủy không? Bệnh nhân có bị báo lỗi 500 không?"*
-* **Vấn đề kỹ thuật:** Các thao tác phụ (Side Effects) như gửi Mail, SMS, Socket phụ thuộc vào bên thứ ba (Third-party Service). Nếu gom chung vào DB Transaction hoặc không bọc try-catch riêng, một lỗi gửi mail nhỏ sẽ làm rollback toàn bộ lịch hẹn của bệnh nhân.
-* **Cách giải quyết trong code:**
+**Giải thích:** Express kiểm tra các route theo thứ tự khai báo. Nếu
+route `/:id` đứng trước, request `/code/APT001` có thể khớp với route
+động ở segment đầu tiên, khiến `req.params.id` nhận giá trị `"code"`.
 
-#### 1. Nguyên tắc thiết kế (Decoupling Core DB & Side Effects)
-* **Giao dịch cốt lõi (Core Transaction):** Tạo bệnh nhân, tạo lịch hẹn, khóa slot $\rightarrow$ Bắt buộc phải thành công trọn vẹn trong `transaction`.
-* **Tác vụ thông báo phụ (Side Effects):** Gửi email, phát Socket.io $\rightarrow$ Chạy sau khi `transaction.commit()` và bọc trong khối `try-catch` riêng biệt (non-blocking).
+Ví dụ:
 
-#### 2. Triển khai trong Service (`backend/src/services/appointment.service.js`)
-```javascript
-const createAppointment = async (data) => {
-  // GIAI ĐOẠN 1: GIAO DỊCH DATABASE BẮT BUỘC
-  const t = await sequelize.transaction();
-  let appointment;
-  try {
-    // Thao tác DB (Atomic book slot, create patient, create appointment)
-    appointment = await appointmentRepository.createAppointment(appointmentData, t);
-    await slotRepository.updateSlotStatus(data.bookable_slot_id, "booked", t);
-    await t.commit(); // DỮ LIỆU ĐÃ AN TOÀN TRONG MYSQL
-  } catch (dbError) {
-    await t.rollback();
-    throw dbError; // Lỗi DB mới báo lỗi về client
-  }
-
-  // GIAI ĐOẠN 2: THÔNG BÁO VÀ TIỆN ÍCH NGOẠI VI (KHÔNG ĐƯỢC CHẶN PHẢN HỒI)
-  // Xóa cache RAM
-  invalidateDoctorCache(slot.doctor_id);
-
-  // Phát Socket Realtime (nếu lỗi mạng thì ghi log, không làm fail API)
-  try {
-    emitToDoctor(slot.doctor_id, "appointment:new", appointment);
-  } catch (socketErr) {
-    console.error("[Socket Error] Gửi thông báo realtime thất bại:", socketErr.message);
-  }
-
-  // Gửi Email qua SMTP (chạy ngầm, không await làm chậm response)
-  sendMail(doctor.email, "Lịch hẹn mới", emailHtml).catch((mailErr) => {
-    console.error("[Mail Error] Gửi mail thất bại (lỗi SMTP):", mailErr.message);
-    // Có thể ghi vào bảng `failed_jobs` để worker retry gửi lại sau
-  });
-
-  return appointment; // Luôn trả kết quả thành công cho bệnh nhân
-};
-```
-
----
-
-### Tình huống 8: Thứ tự khai báo Route và Cơ chế Xử lý lỗi tập trung trong Express 5 (Pipeline & Global Error Handler)
-
-* **Câu hỏi của Giảng viên:** 
-  1. *"Tại sao trong route appointment, dòng `router.get('/code/:code')` bắt buộc phải đặt TRƯỚC dòng `router.get('/:id')`?"*
-  2. *"Cơ chế xử lý lỗi tập trung (Global Error Handling) trong Express 5 hoạt động như thế nào? Khi Service ném `throw new ApiError(404, '...')`, luồng đi của lỗi ra sao?"*
-* **Cách giải quyết trong code:**
-
-#### 1. Thứ tự Route trong Module (`backend/src/routes/appointment.route.js`)
-Express quét route theo thứ tự từ trên xuống dưới:
-```javascript
-// ĐÚNG: Route tĩnh / cụ thể đặt TRƯỚC
+``` javascript
+// Route cụ thể đặt trước
 router.get("/code/:code", appointmentController.getAppointmentByCode);
 
-// Route tham số động đặt SAU
-router.get("/:id", authMiddleware, appointmentController.getAppointmentDetail);
+// Route động đặt sau
+router.get("/:id", appointmentController.getAppointmentDetail);
 ```
-* **Giải thích:** Nếu đảo ngược lại, khi bệnh nhân tra cứu `GET /api/appointments/code/APT001`, Express sẽ khớp ngay vào route `/:id` với giá trị tham số `req.params.id = "code"`. Khi đó controller cố ép kiểu số nguyên để tìm trong DB sẽ gây lỗi logic hoặc trả về 404 sai nghiệp vụ.
 
-#### 2. Luồng xử lý lỗi tập trung (Global Error Pipeline)
-* **Tầng Service:** Khi có lỗi nghiệp vụ, ném lỗi kèm mã HTTP:
-  ```javascript
-  throw new ApiError(404, "Không tìm thấy chi tiết lịch hẹn");
-  ```
-* **Tầng Controller:** Bọc try-catch và đẩy lỗi sang middleware tiếp theo:
-  ```javascript
-  catch (error) {
-    next(error); // Chuyển giao lỗi cho Global Error Handler
-  }
-  ```
-* **Tầng Error Handler (`backend/src/middlewares/errorHandler.js`):** Middleware 4 tham số `(err, req, res, next)` đặt ở cuối cùng của `app.js`:
-  ```javascript
-  const errorHandler = (err, req, res, next) => {
-    const statusCode = err.statusCode || 500;
-    const responsePayload = {
-      success: false,
-      message: err.message || "Lỗi máy chủ nội bộ",
-      errors: err.errors || null
-    };
+**Trả lời ngắn:** Đặt route cụ thể trước route động để tránh route tổng
+quát bắt nhầm request.
 
-    if (process.env.NODE_ENV === "development") {
-      responsePayload.stack = err.stack;
-    }
+## Tình huống 19. Global Error Handler trong Express 5
 
-    res.status(statusCode).json(responsePayload);
-  };
+**Câu hỏi:** Khi Service ném `ApiError(404, "...")`, lỗi đi qua những
+tầng nào và được trả về client ra sao?
 
-  module.exports = errorHandler;
-  ```
-* **Tầng App (`backend/src/app.js`):**
-  ```javascript
-  app.use("/api", rootRouter);
-  app.use(errorHandler); // Luôn đứng sau tất cả các route để tóm mọi lỗi
-  ```
+**Luồng xử lý:** 1. Service phát sinh lỗi bằng `throw`. 2. Controller
+chuyển lỗi bằng `next(error)` nếu đang dùng `try-catch`. 3. Global Error
+Handler nhận lỗi và tạo response JSON. 4. Middleware xử lý lỗi phải được
+khai báo sau các route.
 
----
+Ví dụ:
 
-## 5. Tóm tắt nhanh bảng ánh xạ kiến trúc đồ án khi trả lời vấn đáp
+``` javascript
+const errorHandler = (err, req, res, next) => {
+  const statusCode = err.statusCode || 500;
 
-| Thành phần | Vị trí thư mục | Trách nhiệm chính |
-| :--- | :--- | :--- |
-| **Entity / Model** | `backend/src/models/` | Định nghĩa cấu trúc bảng MySQL (Sequelize), khóa ngoại, chỉ mục (Indexes). |
-| **Repository** | `backend/src/repositories/` | Thực thi các câu lệnh truy vấn dữ liệu (`findAll`, `create`, `update`, atomic lock). |
-| **Service** | `backend/src/services/` | Logic nghiệp vụ, máy trạng thái (FSM), quản lý Transaction, Socket, Mail, xóa Cache RAM. |
-| **Controller** | `backend/src/controllers/` | Tiếp nhận request từ Client, gọi Service, định dạng và trả về mã HTTP (`200`, `201`, `400`...). |
-| **Route / Module** | `backend/src/routes/` | Khai báo URL endpoint, gắn chuỗi Middleware xác thực (`authMiddleware`) và kiểm tra dữ liệu (`validate`). |
-| **Middleware & Utils** | `backend/src/middlewares/`, `backend/src/utils/` | Xử lý lỗi tập trung (`errorHandler`), quản lý Blacklist token trong RAM, mã hóa Bcrypt, kết nối Socket.io. |
+  return res.status(statusCode).json({
+    success: false,
+    message: err.message || "Lỗi máy chủ nội bộ",
+    errors: err.errors || null
+  });
+};
+```
+
+Trong `app.js`:
+
+``` javascript
+app.use("/api", rootRouter);
+app.use(errorHandler);
+```
+
+**Lưu ý Express 5:** Nếu một route handler hoặc middleware trả về
+Promise bị reject hoặc phát sinh lỗi trong hàm `async`, Express 5 tự
+chuyển lỗi đến error-handling middleware. Vì vậy, `try-catch` và
+`next(error)` vẫn có thể dùng để kiểm soát rõ luồng, nhưng không phải
+lúc nào cũng bắt buộc như cách viết cũ.
+
+**Trả lời ngắn:** Global Error Handler là middleware có 4 tham số, đặt
+sau các route để tập trung xử lý lỗi và trả response thống nhất.
+
+------------------------------------------------------------------------
+
+## III. Sơ đồ luồng quan trọng cần nhớ
+
+### 1. Luồng đặt lịch
+
+``` text
+Client gửi request
+    ↓
+Route + Middleware
+    - Kiểm tra dữ liệu đầu vào
+    - Kiểm tra giới hạn request (nếu có)
+    ↓
+Controller
+    - Nhận dữ liệu và gọi Service
+    ↓
+Service + Transaction
+    - Kiểm tra slot
+    - Khóa slot
+    - Kiểm tra trạng thái và ngày giờ
+    - Tạo appointment
+    - Cập nhật slot thành booked
+    ↓
+Commit transaction
+    ↓
+Sau commit
+    - Xóa cache
+    - Gửi email / Socket (nếu có)
+    ↓
+Trả response cho Client
+```
+
+### 2. Luồng hủy lịch
+
+``` text
+Client gửi yêu cầu hủy
+    ↓
+Route + Middleware
+    ↓
+Controller
+    ↓
+Service
+    - Kiểm tra lịch có tồn tại
+    - Kiểm tra quyền người thực hiện
+    - Kiểm tra trạng thái có được hủy
+    ↓
+Transaction
+    - Cập nhật appointment thành cancelled
+    - Mở lại slot thành available
+    ↓
+Commit
+    ↓
+Xóa cache và gửi thông báo (nếu có)
+```
+
+### 3. Luồng xử lý lỗi
+
+``` text
+Route / Controller / Service / Repository
+                  ↓
+              Phát sinh lỗi
+                  ↓
+       Global Error Handler
+                  ↓
+        Response JSON thống nhất
+```
+
+------------------------------------------------------------------------
+
+## IV. Bảng câu trả lời nhanh khi vấn đáp
+
+  ----------------------------------------------------------------------------
+                           STT Câu hỏi                   Ý chính cần trả lời
+  ---------------------------- ------------------------- ---------------------
+                             1 Hai người cùng đặt một    Transaction +
+                               slot?                     `FOR UPDATE` + cập
+                                                         nhật có điều kiện
+
+                             2 Ai kiểm soát trạng thái   Service kiểm tra quy
+                               lịch?                     tắc chuyển trạng thái
+
+                             3 Hủy lịch có mở lại slot?  Có, cập nhật
+                                                         appointment và slot
+                                                         trong cùng
+                                                         transaction
+
+                             4 Bác sĩ A xem lịch bác sĩ  Lọc theo `doctor_id`
+                               B?                        lấy từ token và quan
+                                                         hệ slot
+
+                             5 Dữ liệu sai định dạng?    Middleware validate;
+                                                         Service kiểm tra
+                                                         nghiệp vụ
+
+                             6 Client gửi `doctor_id`    Không tin body; lấy
+                               giả?                      bác sĩ từ slot trong
+                                                         database
+
+                             7 Mã lịch hẹn bị trùng?     Sinh mã phù hợp và
+                                                         đặt UNIQUE ở database
+
+                             8 Email/Socket lỗi?         Không rollback dữ
+                                                         liệu cốt lõi đã
+                                                         commit
+
+                             9 Danh sách nhiều dữ liệu?  Phân trang, lọc ở
+                                                         database, giới hạn
+                                                         `limit`
+
+                            10 Bác sĩ nghỉ ngày?         Chỉ chuyển slot chưa
+                                                         đặt sang `off`; giữ
+                                                         slot `booked`
+
+                            11 Token hết hạn?            Middleware xác thực
+                                                         JWT và trả 401
+
+                            12 Thu hồi token?            Blacklist hoặc quản
+                                                         lý phiên/token
+                                                         version
+
+                            13 Chống spam?               Rate Limiting và kiểm
+                                                         tra giới hạn nghiệp
+                                                         vụ
+
+                            14 Cache cũ sau đặt/hủy?     Xóa cache sau khi
+                                                         transaction commit
+
+                            15 Optimistic/Pessimistic?   Khác nhau ở cách phát
+                                                         hiện và xử lý tranh
+                                                         chấp
+
+                            16 Vì sao không UNIQUE slot  Cần lưu lịch sử và
+                               trong appointment?        cho phép đặt lại sau
+                                                         khi hủy
+
+                            17 Danh sách rỗng trả mã gì? Thường 200 + `[]`;
+                                                         chi tiết không tồn
+                                                         tại là 404
+
+                            18 Vì sao route cụ thể đặt   Tránh route động bắt
+                               trước?                    nhầm request
+
+                            19 Global Error Handler?     Middleware 4 tham số,
+                                                         đặt cuối các route
+  ----------------------------------------------------------------------------
+
+------------------------------------------------------------------------
+
+## V. Một số điểm cần kiểm tra lại trong source code trước khi bảo vệ
+
+1.  Kiểm tra đúng tên model, repository, service và đường dẫn file trong
+    dự án; tài liệu chỉ dùng tên tham khảo.
+2.  Đảm bảo thao tác tạo appointment và cập nhật trạng thái slot nằm
+    trong cùng transaction.
+3.  Khi hủy lịch, cập nhật appointment và mở lại slot trong cùng
+    transaction.
+4.  Khi bác sĩ nghỉ, không cập nhật tất cả slot thành `off` một cách
+    không điều kiện; phải giữ slot `booked`.
+5.  Không gửi email trước khi transaction commit. Nếu gửi thất bại,
+    không làm mất lịch đã tạo.
+6.  Nếu dùng cache, bảo đảm key cache có đủ các tham số ảnh hưởng kết
+    quả như bác sĩ, ngày, trang, trạng thái; xóa cache sau khi dữ liệu
+    thay đổi.
+7.  Nếu dùng blacklist/token store trong RAM, phải nêu rõ giới hạn khi
+    server restart hoặc chạy nhiều instance.
+8.  Rate limiter tự viết bằng `Map` cũng có giới hạn tương tự; không xem
+    đây là giải pháp đầy đủ cho môi trường nhiều server.
+9.  Với truy vấn phân trang có `include`, kiểm tra `distinct: true` và
+    quan hệ Sequelize để tránh đếm sai bản ghi.
+10. Không học thuộc các đoạn code minh họa như thể toàn bộ đã có trong
+    dự án. Nên nắm luồng xử lý, vị trí từng tầng và đối chiếu với source
+    thực tế.
