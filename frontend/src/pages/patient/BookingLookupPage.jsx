@@ -7,6 +7,8 @@ export default function BookingLookupPage() {
   const [result, setResult] = useState(null);
   const [error, setError] = useState(null);
   const [loading, setLoading] = useState(false);
+  const [phone, setPhone] = useState('');
+  const [cancelling, setCancelling] = useState(false);
 
   const handleLookup = async (e) => {
     e.preventDefault();
@@ -187,6 +189,41 @@ export default function BookingLookupPage() {
               </div>
             </div>
           </div>
+
+          {['pending', 'confirmed'].includes(result.status) && (
+            <div className="px-6 pb-6 space-y-2 border-t border-slate-100 pt-4">
+              <p className="text-xs text-slate-500">Nhập số điện thoại đã đặt lịch để hủy. Khung giờ sẽ được mở lại cho người khác.</p>
+              <div className="flex gap-2">
+                <input
+                  type="tel"
+                  value={phone}
+                  onChange={(e) => setPhone(e.target.value)}
+                  placeholder="Số điện thoại"
+                  className="flex-1 border border-slate-300 rounded-xl px-3 py-2 text-sm"
+                />
+                <button
+                  type="button"
+                  disabled={cancelling || !phone.trim()}
+                  onClick={async () => {
+                    if (!window.confirm('Bạn chắc chắn muốn hủy lịch hẹn này?')) return;
+                    setCancelling(true);
+                    setError(null);
+                    try {
+                      const res = await appointmentApi.cancelByCode(result.appointment_code, phone.trim());
+                      setResult(res?.data || res);
+                    } catch (err) {
+                      setError(err?.message || 'Không hủy được lịch hẹn');
+                    } finally {
+                      setCancelling(false);
+                    }
+                  }}
+                  className="bg-rose-600 hover:bg-rose-700 disabled:opacity-60 text-white px-4 py-2 rounded-xl text-sm font-semibold"
+                >
+                  {cancelling ? 'Đang hủy...' : 'Hủy lịch'}
+                </button>
+              </div>
+            </div>
+          )}
         </div>
       )}
     </div>

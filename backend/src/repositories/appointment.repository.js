@@ -4,142 +4,178 @@ const Patient = require("../models/patient.model");
 const Doctor = require("../models/doctor.model");
 const Specialty = require("../models/specialty.models");
 const { Op } = require("sequelize");
+const { ACTIVE_STATUSES } = require("../constants/appointment.constants");
 
 const PATIENT_FIELDS = ["id", "full_name", "phone_number", "email", "address"];
 
-// Lấy danh sách lịch hẹn của bác sĩ
-const getAppointmentsByDoctorId = async (doctorId) => {
-    return await Appointment.findAll({
-        attributes: ["id", "appointment_code", "status", "reason_for_visit", "price", "payment_method", "payment_status"],
+const LIST_ATTRIBUTES = [
+    "id",
+    "appointment_code",
+    "status",
+    "reason_for_visit",
+    "note",
+    "price",
+    "payment_method",
+    "payment_status",
+    "created_at"
+];
+
+const buildDoctorSlotInclude = (doctorId, extraWhere = {}, options = {}) => ({
+    model: BookableSlot,
+    attributes: ["id", "doctor_id", "slot_date", "start_time", "end_time", "status"],
+    where: { doctor_id: doctorId, ...extraWhere },
+    required: true,
+    ...(options.lock && options.transaction
+        ? { lock: options.transaction.LOCK.UPDATE }
+        : {})
+});
+
+const patientInclude = {
+    model: Patient,
+    attributes: PATIENT_FIELDS
+};
+
+const buildDateWhere = (date) => {
+    if (!date) return {};
+    return { slot_date: date };
+};
+
+const listAppointmentsByDoctor = async ({
+    doctorId,
+    status,
+    date,
+    page,
+    limit,
+    transaction = null
+}) => {
+    const where = {};
+    if (status && status !== "all") where.status = status;
+
+    const { count, rows } = await Appointment.findAndCountAll({
+        where,
+        attributes: LIST_ATTRIBUTES,
         include: [
-            {
-                model: BookableSlot,
-                attributes: ["slot_date", "start_time", "end_time"],
-                where: { doctor_id: doctorId }
-            },
-            {
-                model: Patient,
-                attributes: PATIENT_FIELDS
-            }
+            buildDoctorSlotInclude(doctorId, buildDateWhere(date)),
+            patientInclude
         ],
         order: [
             [{ model: BookableSlot }, "slot_date", "ASC"],
             [{ model: BookableSlot }, "start_time", "ASC"]
-        ]
+        ],
+        distinct: true,
+        limit,
+        offset: (page - 1) * limit,
+        transaction
     });
+
+    return { rows, count };
 };
 
-// Lấy chi tiết lịch hẹn theo bác sĩ
-const getAppointmentDetail = async (appointmentId, doctorId) => {
+const getAppointmentsByDoctorId = async (doctorId) => {
+    const { rows } = await listAppointmentsByDoctor({
+        doctorId,
+        page: 1,
+        limit: 10000
+    });
+    return rows;
+};
+
+const findAppointmentById = async (appointmentId, options = {}) => {
     return await Appointment.findOne({
         where: { id: appointmentId },
         include: [
             {
                 model: BookableSlot,
-                attributes: ["id", "doctor_id", "slot_date", "start_time", "end_time"],
-                where: { doctor_id: doctorId },
+                attributes: ["id", "doctor_id", "slot_date", "start_time", "end_time", "status"],
                 required: true
             },
-            {
-                model: Patient,
-                attributes: PATIENT_FIELDS
-            }
-        ]
+            patientInclude
+        ],
+        transaction: options.transaction,
+        lock: options.lock && options.transaction
+            ? options.transaction.LOCK.UPDATE
+            : undefined
     });
 };
 
-// Lọc lịch hẹn theo tình trạng
+const getAppointmentDetail = async (appointmentId, doctorId, options = {}) => {
+    return await Appointment.findOne({
+        where: { id: appointmentId },
+        include: [
+            buildDoctorSlotInclude(doctorId, {}, options),
+            patientInclude
+        ],
+        transaction: options.transaction
+    });
+};
+
 const getAppointmentsByStatus = async (doctorId, status) => {
-    return await Appointment.findAll({
-        where: { status },
-        attributes: ["id", "appointment_code", "status", "reason_for_visit"],
-        include: [
-            {
-                model: BookableSlot,
-                attributes: ["slot_date", "start_time", "end_time"],
-                where: { doctor_id: doctorId },
-                required: true
-            },
-            {
-                model: Patient,
-                attributes: PATIENT_FIELDS
-            }
-        ],
-        order: [
-            [{ model: BookableSlot }, "slot_date", "ASC"],
-            [{ model: BookableSlot }, "start_time", "ASC"]
-        ]
+    const { rows } = await listAppointmentsByDoctor({
+        doctorId,
+        status,
+        page: 1,
+        limit: 10000
     });
+    return rows;
 };
 
-// Lọc lịch hẹn theo ngày khám
 const getAppointmentsByDate = async (doctorId, date) => {
-    const start = new Date(date);
-    const end = new Date(date);
-    end.setDate(end.getDate() + 1);
+    const { rows } = await listAppointmentsByDoctor({
+        doctorId,
+        date,
+        page: 1,
+        limit: 10000
+    });
+    return rows;
+};
 
+const getActiveAppointmentsByDoctorAndDate = async (doctorId, date) => {
     return await Appointment.findAll({
+        where: { status: { [Op.in]: ACTIVE_STATUSES } },
         attributes: ["id", "appointment_code", "status", "reason_for_visit"],
         include: [
-            {
-                model: BookableSlot,
-                attributes: ["slot_date", "start_time", "end_time"],
-                where: {
-                    doctor_id: doctorId,
-                    slot_date: { [Op.gte]: start, [Op.lt]: end }
-                },
-                required: true
-            },
-            {
-                model: Patient,
-                attributes: PATIENT_FIELDS
-            }
+            buildDoctorSlotInclude(doctorId, { slot_date: date }),
+            patientInclude
         ],
-        order: [
-            [{ model: BookableSlot }, "slot_date", "ASC"],
-            [{ model: BookableSlot }, "start_time", "ASC"]
-        ]
+        order: [[{ model: BookableSlot }, "start_time", "ASC"]]
     });
 };
 
-// Tạo lịch hẹn mới
-const createAppointment = async (data) => {
-    // Tự động tạo mã appointment_code
-    const lastAppointment = await Appointment.findOne({
-        order: [["appointment_code", "DESC"]],
-        attributes: ["appointment_code"]
-    });
-
-    let newCode = "APT001";
-    if (lastAppointment && lastAppointment.appointment_code) {
-        const lastNumber = parseInt(
-            lastAppointment.appointment_code.replace("APT", ""), 10
-        );
-        const nextNumber = (lastNumber + 1).toString().padStart(3, "0");
-        newCode = `APT${nextNumber}`;
-    }
-
-    return await Appointment.create({ ...data, appointment_code: newCode });
-};
-
-// Cập nhật trạng thái lịch hẹn
-const updateAppointmentStatus = async (appointmentId, status) => {
-    const appointment = await Appointment.findByPk(appointmentId);
-    if (!appointment) return null;
-    appointment.status = status;
-    await appointment.save();
+const createAppointment = async (data, transaction = null) => {
+    const appointment = await Appointment.create(
+        { ...data, appointment_code: data.appointment_code || `TMP${Date.now()}` },
+        { transaction }
+    );
+    const code = `APT${String(appointment.id).padStart(3, "0")}`;
+    await appointment.update({ appointment_code: code }, { transaction });
     return appointment;
 };
 
-// Tìm lịch hẹn theo appointment_code (tra cứu công khai)
-const findByAppointmentCode = async (appointmentCode) => {
+const updateAppointmentStatus = async (appointmentId, status, transaction = null) => {
+    const appointment = await Appointment.findByPk(appointmentId, { transaction });
+    if (!appointment) return null;
+    appointment.status = status;
+    await appointment.save({ transaction });
+    return appointment;
+};
+
+const findByAppointmentCode = async (appointmentCode, options = {}) => {
     return await Appointment.findOne({
         where: { appointment_code: appointmentCode },
-        attributes: ["id", "appointment_code", "status", "reason_for_visit", "price", "payment_method", "payment_status"],
+        attributes: [
+            "id",
+            "appointment_code",
+            "status",
+            "reason_for_visit",
+            "price",
+            "payment_method",
+            "payment_status",
+            "patient_id"
+        ],
         include: [
             {
                 model: BookableSlot,
-                attributes: ["slot_date", "start_time", "end_time", "doctor_id"],
+                attributes: ["id", "slot_date", "start_time", "end_time", "doctor_id", "status"],
                 include: [
                     {
                         model: Doctor,
@@ -157,15 +193,22 @@ const findByAppointmentCode = async (appointmentCode) => {
                 model: Patient,
                 attributes: PATIENT_FIELDS
             }
-        ]
+        ],
+        transaction: options.transaction,
+        lock: options.lock && options.transaction
+            ? options.transaction.LOCK.UPDATE
+            : undefined
     });
 };
 
 module.exports = {
+    listAppointmentsByDoctor,
     getAppointmentsByDoctorId,
+    findAppointmentById,
     getAppointmentDetail,
     getAppointmentsByStatus,
     getAppointmentsByDate,
+    getActiveAppointmentsByDoctorAndDate,
     createAppointment,
     updateAppointmentStatus,
     findByAppointmentCode

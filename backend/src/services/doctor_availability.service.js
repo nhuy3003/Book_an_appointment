@@ -1,4 +1,5 @@
 const doctorAvailabilityRepository = require("../repositories/doctor_availability.repository");
+const appointmentRepository = require("../repositories/appointment.repository");
 const cache = require("../utils/cache");
 const slotRepository = require("../repositories/bookable_slot.repository");
 const BookableSlot = require("../models/bookable_slot.model");
@@ -380,11 +381,19 @@ const setDayOff = async (doctorId, date, off) => {
     if (!isValidDateStr(date)) throw new ApiError(400, "Ngày không hợp lệ (YYYY-MM-DD)");
     if (date < todayStr()) throw new ApiError(400, "Không thể thay đổi ngày trong quá khứ");
     const [affected] = await slotRepository.updateUnbookedSlotsByDate(doctorId, date, off ? "off" : "available");
-    const daySlots = await slotRepository.findSlotsInRange({ doctorId, from: date, to: date });
-    const bookedCount = daySlots.filter(s => s.status === "booked").length;
-    // Nghỉ/mở ngày → xóa cache
+    const remainingAppointments = await appointmentRepository.getActiveAppointmentsByDoctorAndDate(
+        doctorId,
+        date
+    );
+    const bookedCount = remainingAppointments.length;
     invalidateCache(doctorId);
-    return { date, off: Boolean(off), affected, bookedCount };
+    return {
+        date,
+        off: Boolean(off),
+        affected,
+        bookedCount,
+        remainingAppointments,
+    };
 };
 
 module.exports = {

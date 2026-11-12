@@ -1,8 +1,8 @@
 const Patient = require("../models/patient.model");
 
 // Lấy patient theo id
-const findPatientById = async (id) => {
-    return await Patient.findByPk(id);
+const findPatientById = async (id, transaction = null) => {
+    return await Patient.findByPk(id, { transaction });
 };
 
 // Tìm patient theo email
@@ -13,9 +13,10 @@ const findPatientByEmail = async (email) => {
 };
 
 // Tìm patient theo số điện thoại
-const findPatientByPhone = async (phone_number) => {
+const findPatientByPhone = async (phone_number, transaction = null) => {
     return await Patient.findOne({
-        where: { phone_number }
+        where: { phone_number },
+        transaction
     });
 };
 
@@ -27,14 +28,15 @@ const findAllPatients = async () => {
 };
 
 // Tạo patient mới
-const createPatient = async (data) => {
-    return await Patient.create(data);
+const createPatient = async (data, transaction = null) => {
+    return await Patient.create(data, { transaction });
 };
 
 // Cập nhật thông tin patient
-const updatePatient = async (id, data) => {
+const updatePatient = async (id, data, transaction = null) => {
     return await Patient.update(data, {
-        where: { id }
+        where: { id },
+        transaction
     });
 };
 

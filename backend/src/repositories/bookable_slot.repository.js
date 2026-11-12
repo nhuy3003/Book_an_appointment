@@ -4,7 +4,7 @@ const DoctorAvailability = require("../models/doctor_availability.model");
 const { Op } = require("sequelize");
 
 // Tìm slot theo id
-const findSlotById = async (id) => {
+const findSlotById = async (id, options = {}) => {
     return await BookableSlot.findByPk(id, {
         include: [
             {
@@ -15,8 +15,35 @@ const findSlotById = async (id) => {
                 model: DoctorAvailability,
                 attributes: ["id", "day_of_week", "start_time", "end_time", "slot_duration_minutes"]
             }
-        ]
+        ],
+        transaction: options.transaction,
+        lock: options.lock && options.transaction
+            ? options.transaction.LOCK.UPDATE
+            : undefined
     });
+};
+
+/**
+ * Khóa hàng slot (SELECT ... FOR UPDATE) trong transaction.
+ * Request thứ 2 cùng slot phải chờ request thứ 1 commit/rollback.
+ */
+const findSlotByIdForUpdate = async (id, transaction) => {
+    return await BookableSlot.findByPk(id, {
+        transaction,
+        lock: transaction.LOCK.UPDATE
+    });
+};
+
+/**
+ * Chỉ đánh dấu booked khi slot vẫn available.
+ * Trả về số dòng bị ảnh hưởng: 0 = đã bị người khác đặt / không còn available.
+ */
+const markSlotBookedIfAvailable = async (id, transaction) => {
+    const [affected] = await BookableSlot.update(
+        { status: "booked" },
+        { where: { id, status: "available" }, transaction }
+    );
+    return affected;
 };
 
 // Lấy tất cả slot của một bác sĩ
@@ -79,10 +106,10 @@ const updateSlot = async (id, data) => {
 };
 
 // Cập nhật trạng thái slot
-const updateSlotStatus = async (id, status) => {
+const updateSlotStatus = async (id, status, transaction = null) => {
     return await BookableSlot.update(
         { status },
-        { where: { id } }
+        { where: { id }, transaction }
     );
 };
 
@@ -152,6 +179,8 @@ module.exports = {
     deleteUnbookedSlotsByAvailabilityFrom,
     countBookedByAvailability,
     findSlotById,
+    findSlotByIdForUpdate,
+    markSlotBookedIfAvailable,
     findSlotsByDoctor,
     findAvailableSlotsByDoctorAndDate,
     findSlotsByDoctorAndDateRange,

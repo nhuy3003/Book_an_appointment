@@ -13,6 +13,8 @@ export default function DoctorAppointmentsPage() {
   // Bộ lọc
   const [statusFilter, setStatusFilter] = useState('all');
   const [dateFilter, setDateFilter] = useState('');
+  const [page, setPage] = useState(1);
+  const [pagination, setPagination] = useState({ page: 1, limit: 10, total: 0, totalPages: 1 });
 
   // Modal chi tiết & cập nhật
   const [selectedAppointment, setSelectedAppointment] = useState(null);
@@ -25,9 +27,17 @@ export default function DoctorAppointmentsPage() {
       const res = await appointmentApi.getDoctorAppointments({
         status: statusFilter,
         date: dateFilter || undefined,
+        page,
+        limit: 10,
       });
       const data = res.data || res || [];
-      setAppointments(Array.isArray(data) ? data : []);
+      if (Array.isArray(data)) {
+        setAppointments(data);
+        setPagination({ page: 1, limit: data.length, total: data.length, totalPages: 1 });
+      } else {
+        setAppointments(data.items || []);
+        setPagination(data.pagination || { page: 1, limit: 10, total: 0, totalPages: 1 });
+      }
     } catch (err) {
       setError(err?.message || 'Không thể tải danh sách ca hẹn');
     } finally {
@@ -37,7 +47,7 @@ export default function DoctorAppointmentsPage() {
 
   useEffect(() => {
     fetchAppointments();
-  }, [statusFilter, dateFilter]);
+  }, [statusFilter, dateFilter, page]);
 
   // Lắng nghe sự kiện ca hẹn mới qua Socket
   useEffect(() => {
@@ -99,7 +109,7 @@ export default function DoctorAppointmentsPage() {
 
         <div className="flex items-center gap-2">
           <span className="text-xs bg-primary-50 text-primary-700 px-3 py-1.5 rounded-lg font-semibold">
-            Tổng cộng: {appointments.length} ca hẹn
+            Tổng cộng: {pagination.total} ca hẹn
           </span>
         </div>
       </div>
@@ -112,7 +122,10 @@ export default function DoctorAppointmentsPage() {
             <span className="text-xs font-semibold text-slate-600">Trạng thái:</span>
             <select
               value={statusFilter}
-              onChange={(e) => setStatusFilter(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setStatusFilter(e.target.value);
+              }}
               className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:border-primary-500 bg-white"
             >
               <option value="all">Tất cả trạng thái</option>
@@ -130,7 +143,10 @@ export default function DoctorAppointmentsPage() {
             <input
               type="date"
               value={dateFilter}
-              onChange={(e) => setDateFilter(e.target.value)}
+              onChange={(e) => {
+                setPage(1);
+                setDateFilter(e.target.value);
+              }}
               className="border border-slate-300 rounded-lg px-3 py-1.5 text-xs font-medium focus:outline-none focus:border-primary-500"
             />
             {dateFilter && (
@@ -274,6 +290,28 @@ export default function DoctorAppointmentsPage() {
           </div>
         )}
       </div>
+
+      {pagination.totalPages > 1 && (
+        <div className="flex items-center justify-end gap-2 text-xs">
+          <button
+            disabled={page <= 1}
+            onClick={() => setPage((p) => Math.max(1, p - 1))}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40"
+          >
+            Trang trước
+          </button>
+          <span className="text-slate-500">
+            Trang {pagination.page}/{pagination.totalPages}
+          </span>
+          <button
+            disabled={page >= pagination.totalPages}
+            onClick={() => setPage((p) => p + 1)}
+            className="px-3 py-1.5 rounded-lg border border-slate-200 disabled:opacity-40"
+          >
+            Trang sau
+          </button>
+        </div>
+      )}
 
       {/* Modal Chi Tiết Lịch Hẹn */}
       <AppointmentDetailModal

@@ -8,6 +8,8 @@ const appointmentApi = {
     const cleanParams = {};
     if (params.status && params.status !== 'all') cleanParams.status = params.status;
     if (params.date) cleanParams.date = params.date;
+    if (params.page) cleanParams.page = params.page;
+    if (params.limit) cleanParams.limit = params.limit;
     return axiosClient.get('/appointments', { params: cleanParams });
   },
 
@@ -34,6 +36,10 @@ const appointmentApi = {
   // Backend: POST /api/appointments/create
   createAppointment: (data) => {
     return axiosClient.post('/appointments/create', data);
+  },
+
+  cancelByCode: (code, phone_number) => {
+    return axiosClient.post(`/appointments/code/${code}/cancel`, { phone_number });
   },
 };
 

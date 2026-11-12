@@ -2,7 +2,12 @@ const express = require("express");
 const router = express.Router();
 const appointmentController = require("../controllers/appointment.controller");
 const authMiddleware = require("../middlewares/auth.middleware");
-const { createAppointmentRules } = require("../middlewares/validate");
+const {
+  createAppointmentRules,
+  updateAppointmentStatusRules,
+  cancelAppointmentByCodeRules,
+  listAppointmentQueryRules,
+} = require("../middlewares/validate");
 
 /**
  * @swagger
@@ -19,14 +24,36 @@ const { createAppointmentRules } = require("../middlewares/validate");
  *     tags: [Appointments]
  *     security:
  *       - bearerAuth: []
+ *     parameters:
+ *       - in: query
+ *         name: page
+ *         schema: { type: integer, example: 1 }
+ *       - in: query
+ *         name: limit
+ *         schema: { type: integer, example: 10 }
+ *       - in: query
+ *         name: status
+ *         schema: { type: string, enum: [pending, confirmed, completed, cancelled, missed, all] }
+ *       - in: query
+ *         name: date
+ *         schema: { type: string, example: "2026-11-12" }
  *     responses:
  *       200:
- *         description: Trả về danh sách lịch hẹn
+ *         description: Trả về danh sách lịch hẹn có phân trang
  */
-router.get("/", authMiddleware, appointmentController.getAppointmentsByDoctorId);
+router.get(
+  "/",
+  authMiddleware,
+  listAppointmentQueryRules,
+  appointmentController.getAppointmentsByDoctorId
+);
 
-// Tra cứu công khai theo mã - ĐặT TRƯỚC /:id để tránh bị match nhầm
 router.get("/code/:code", appointmentController.getAppointmentByCode);
+router.post(
+  "/code/:code/cancel",
+  cancelAppointmentByCodeRules,
+  appointmentController.cancelAppointmentByCode
+);
 
 /**
  * @swagger
@@ -127,7 +154,12 @@ router.get("/date/:date", authMiddleware, appointmentController.getAppointmentsB
  *       200:
  *         description: Cập nhật thành công
  */
-router.patch("/:id/status", authMiddleware, appointmentController.updateAppointmentStatus);
+router.patch(
+  "/:id/status",
+  authMiddleware,
+  updateAppointmentStatusRules,
+  appointmentController.updateAppointmentStatus
+);
 
 
 /**
@@ -150,4 +182,4 @@ router.patch("/:id/status", authMiddleware, appointmentController.updateAppointm
  */
 router.get("/:id", authMiddleware, appointmentController.getAppointmentDetail);
 
-module.exports = router;
+module.exports = router;

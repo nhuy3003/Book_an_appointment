@@ -15,7 +15,10 @@ const Appointment = sequelize.define(
             primaryKey: true,
             autoIncrement: true
         },
-        appointment_code: DataTypes.STRING,
+        appointment_code: {
+            type: DataTypes.STRING,
+            unique: true
+        },
         patient_id: DataTypes.INTEGER,
         bookable_slot_id: DataTypes.INTEGER,
         status: {

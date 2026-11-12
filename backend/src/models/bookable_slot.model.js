@@ -21,7 +21,14 @@ const BookableSlot = sequelize.define("BookableSlot", {
 },
 {
     tableName: "bookable_slot",
-    timestamps: false
+    timestamps: false,
+    indexes: [
+        {
+            unique: true,
+            fields: ["doctor_id", "slot_date", "start_time"],
+            name: "uk_slot_doctor_date_time"
+        }
+    ]
 });
 
 module.exports = BookableSlot;
