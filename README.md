@@ -7,10 +7,12 @@ Tài liệu tổng hợp các tình huống thực tế và câu hỏi có thể
 vệ đồ án. Nội dung được gộp từ hai bộ câu hỏi, loại bỏ phần trùng lặp và
 bổ sung các tình huống còn thiếu.
 
-> Lưu ý: Các đoạn code dưới đây là ví dụ minh họa cách xử lý. Khi trả
-> lời giảng viên, cần đối chiếu với đúng tên hàm, tên file và cách triển
-> khai thực tế trong source code. Không nên khẳng định dự án đã có chức
-> năng nếu mã nguồn chưa triển khai.
+> Lưu ý: Các đoạn code dưới đây là ví dụ minh họa cách xử lý. Trên mỗi
+> đoạn đều ghi **file cụ thể** cần viết (ví dụ
+> `backend/src/services/appointment.service.js`). Khi trả lời giảng viên,
+> đối chiếu đúng tên hàm và mã nguồn thật. Không nên khẳng định dự án đã
+> có chức năng nếu file đó chưa triển khai. Không copy các đoạn minh họa
+> vào source nếu chưa được yêu cầu.
 
 ## I. Kiến trúc và trách nhiệm từng tầng
 
@@ -23,32 +25,33 @@ Client → Route (+ Middleware) → Controller → Service → Repository → Mo
   -----------------------------------------------------------------------
   Thành phần              Vị trí tham khảo        Trách nhiệm
   ----------------------- ----------------------- -----------------------
-  Route                   `src/routes/`           Khai báo URL, gắn
-                                                  middleware xác thực và
-                                                  kiểm tra dữ liệu
+  Route                   `backend/src/routes/`    Khai báo URL, gắn
+                          ví dụ                   middleware xác thực và
+                          `appointment.route.js`  kiểm tra dữ liệu
 
-  Middleware              `src/middlewares/`      Xác thực JWT, validate
-                                                  dữ liệu, giới hạn
-                                                  request, xử lý lỗi
+  Middleware              `backend/src/middlewares/` Xác thực JWT, validate
+                          `auth.middleware.js`,   dữ liệu, giới hạn
+                          `validate.js`,          request, xử lý lỗi
+                          `errorHandler.js`
 
-  Controller              `src/controllers/`      Nhận `req`, lấy dữ liệu
-                                                  cần thiết, gọi Service
+  Controller              `backend/src/controllers/` Nhận `req`, lấy dữ liệu
+                          `appointment.controller.js` cần thiết, gọi Service
                                                   và trả response
 
-  Service                 `src/services/`         Xử lý nghiệp vụ, kiểm
-                                                  tra quyền, transaction
+  Service                 `backend/src/services/`  Xử lý nghiệp vụ, kiểm
+                          `appointment.service.js` tra quyền, transaction
                                                   và điều phối tác vụ
 
-  Repository              `src/repositories/`     Truy vấn, thêm, sửa,
-                                                  xóa dữ liệu bằng
-                                                  Sequelize
+  Repository              `backend/src/repositories/` Truy vấn, thêm, sửa,
+                          `appointment.repository.js`, xóa dữ liệu bằng
+                          `bookable_slot.repository.js` Sequelize
 
-  Entity / Model          `src/models/`           Định nghĩa cấu trúc
-                                                  bảng, kiểu dữ liệu và
+  Entity / Model          `backend/src/models/`    Định nghĩa cấu trúc
+                          `appointment.model.js`  bảng, kiểu dữ liệu và
                                                   quan hệ
 
-  Database                `src/DB/`               Lưu dữ liệu, khóa
-                                                  ngoại, unique, index và
+  Database                `backend/src/DB/`        Lưu dữ liệu, khóa
+                          `datlichkham.sql`       ngoại, unique, index và
                                                   bảo đảm toàn vẹn
   -----------------------------------------------------------------------
 
@@ -74,13 +77,26 @@ như đồng thời, làm sao tránh đặt trùng?
 hai request có thể cùng đọc được trạng thái `available` và cùng tạo lịch
 hẹn.
 
+**Ghi vào các file:**
+
+-   Route nhận request: `backend/src/routes/appointment.route.js`
+    (`POST /create`)
+-   Controller gọi Service: `backend/src/controllers/appointment.controller.js`
+    (hàm `createAppointment`)
+-   Service mở transaction: `backend/src/services/appointment.service.js`
+    (hàm `createAppointment`)
+-   Repository khóa/cập nhật slot: `backend/src/repositories/bookable_slot.repository.js`
+-   Tạo lịch: `backend/src/repositories/appointment.repository.js`
+-   Model slot: `backend/src/models/bookable_slot.model.js`
+-   Database InnoDB: `backend/src/DB/datlichkham.sql`
+
 **Cách giải quyết:** - Service mở transaction cho toàn bộ thao tác đặt
 lịch. - Repository khóa dòng slot bằng `SELECT ... FOR UPDATE`. - Kiểm
 tra slot còn `available` hay không. - Chỉ cập nhật sang `booked` nếu
 trạng thái hiện tại vẫn là `available`. - Tạo appointment trong cùng
 transaction. Nếu có lỗi thì rollback.
 
-**Repository:**
+**Repository — ghi vào `backend/src/repositories/bookable_slot.repository.js`:**
 
 ``` javascript
 const findSlotByIdForUpdate = (id, transaction) =>
@@ -102,7 +118,7 @@ const markSlotBookedIfAvailable = async (id, transaction) => {
 };
 ```
 
-**Service minh họa:**
+**Service — ghi vào `backend/src/services/appointment.service.js` (hàm `createAppointment`):**
 
 ``` javascript
 const appointment = await sequelize.transaction(async (t) => {
@@ -137,10 +153,26 @@ thái nên không thể đặt trùng slot.
 **Câu hỏi:** Vì sao không cho client gửi trạng thái bất kỳ? Nếu lịch đã
 `completed` mà client gửi `cancelled` thì sao?
 
+**Ghi vào các file:**
+
+-   Bảng chuyển trạng thái: `backend/src/constants/appointment.constants.js`
+    (`ALLOWED_STATUS_TRANSITIONS`)
+-   Route + JWT: `backend/src/routes/appointment.route.js`
+    (`PATCH /:id/status`)
+-   Validate enum `status`: `backend/src/middlewares/validate.js`
+    (`updateAppointmentStatusRules`)
+-   Controller lấy `req.body.status` và `req.user.id`:
+    `backend/src/controllers/appointment.controller.js`
+    (hàm `updateAppointmentStatus`)
+-   Máy trạng thái (chỗ quyết định thật): `backend/src/services/appointment.service.js`
+    (hàm `updateAppointmentStatus`)
+-   Cập nhật DB: `backend/src/repositories/appointment.repository.js`
+-   Enum cột `status`: `backend/src/models/appointment.model.js`
+
 **Cách giải quyết:** Service kiểm tra trạng thái hiện tại và trạng thái
 muốn chuyển đến theo quy tắc nghiệp vụ.
 
-Ví dụ:
+**Hằng số / kiểm tra chuyển trạng thái — ghi vào `backend/src/constants/appointment.constants.js`, rồi dùng trong `backend/src/services/appointment.service.js`:**
 
 ``` javascript
 const ALLOWED_TRANSITIONS = {
@@ -171,8 +203,26 @@ là nơi quyết định trạng thái đó có được phép chuyển hay khô
 Nếu cập nhật appointment thành công nhưng cập nhật slot thất bại thì
 sao?
 
+**Ghi vào các file:**
+
+-   Route bác sĩ đổi trạng thái: `backend/src/routes/appointment.route.js`
+    (`PATCH /:id/status`)
+-   Route bệnh nhân hủy theo mã: `backend/src/routes/appointment.route.js`
+    (`POST /code/:code/cancel`)
+-   Controller: `backend/src/controllers/appointment.controller.js`
+    (hàm `updateAppointmentStatus` hoặc `cancelAppointmentByCode`)
+-   Transaction hủy + mở slot: `backend/src/services/appointment.service.js`
+-   Cập nhật lịch: `backend/src/repositories/appointment.repository.js`
+    (hàm `updateAppointmentStatus`)
+-   Mở lại slot: `backend/src/repositories/bookable_slot.repository.js`
+    (hàm `updateSlotStatus`)
+-   Xóa cache sau commit: `backend/src/services/doctor.service.js`
+    (hàm `invalidateDoctorCache`, gọi từ appointment.service)
+
 **Cách giải quyết:** Cập nhật appointment và slot trong cùng
 transaction. Nếu một thao tác thất bại thì rollback cả hai.
+
+**Service — ghi vào `backend/src/services/appointment.service.js`:**
 
 ``` javascript
 await sequelize.transaction(async (t) => {
@@ -209,11 +259,26 @@ transaction để tránh trường hợp lịch đã hủy nhưng slot vẫn b�
 **Câu hỏi:** Bác sĩ đã đăng nhập có thể xem tất cả lịch hẹn không? Làm
 sao kiểm tra lịch thuộc bác sĩ nào?
 
+**Ghi vào các file:**
+
+-   Route gắn JWT: `backend/src/routes/appointment.route.js`
+-   Middleware xác thực: `backend/src/middlewares/auth.middleware.js`
+    (gán `req.user = { id, role }`)
+-   Controller lấy `doctorId` từ token: `backend/src/controllers/appointment.controller.js`
+    (hàm `getAppointmentDetail`, `updateAppointmentStatus`)
+-   Kiểm tra quyền sở hữu: `backend/src/services/appointment.service.js`
+-   Lọc theo `bookable_slot.doctor_id`: `backend/src/repositories/appointment.repository.js`
+    (hàm `getAppointmentDetail`, `listAppointmentsByDoctor`, `buildDoctorSlotInclude`)
+-   Quan hệ Model: `backend/src/models/appointment.model.js` và
+    `backend/src/models/bookable_slot.model.js`
+
 **Cách giải quyết:** - Route dùng `authMiddleware` để xác thực người
 dùng. - Controller lấy `doctorId` từ `req.user.id`, không tin
 `doctor_id` do client gửi. - Repository lọc lịch thông qua quan hệ
 `appointment.bookable_slot_id` → `bookable_slot.doctor_id`. - Service
 kiểm tra quyền sở hữu và trả lỗi phù hợp.
+
+**Service — ghi vào `backend/src/services/appointment.service.js` (hàm `getAppointmentDetail` / `updateAppointmentStatus`):**
 
 ``` javascript
 const appointment = await appointmentRepository.getAppointmentDetail(
@@ -244,7 +309,17 @@ sai hoặc chọn ngày khám đã qua thì xử lý ở đâu?
 2.  **Service:** kiểm tra điều kiện nghiệp vụ như slot tồn tại, slot còn
     trống, ngày giờ khám chưa qua.
 
-Ví dụ validate:
+**Ghi vào các file:**
+
+-   Gắn rule vào route: `backend/src/routes/appointment.route.js`
+    (`createAppointmentRules` trên `POST /create`)
+-   Kiểm tra thiếu field / sai kiểu: `backend/src/middlewares/validate.js`
+-   Ngày quá khứ, slot booked/off: `backend/src/services/appointment.service.js`
+    (hàm `createAppointment`)
+-   Đọc `slot_date` từ DB: `backend/src/repositories/bookable_slot.repository.js`
+-   So sánh ngày: `backend/src/utils/dateHelper.js` (`todayStr`, `nowTimeStr`)
+
+**Validate — ghi vào `backend/src/middlewares/validate.js` (`createAppointmentRules`):**
 
 ``` javascript
 body("bookable_slot_id").notEmpty().isInt({ min: 1 });
@@ -252,7 +327,7 @@ body("phone_number").notEmpty();
 body("patient_name").notEmpty();
 ```
 
-Ví dụ kiểm tra ngày trong Service:
+**Kiểm tra ngày quá khứ — ghi vào `backend/src/services/appointment.service.js`:**
 
 ``` javascript
 if (slot.slot_date < today) {
@@ -268,9 +343,22 @@ tra điều kiện nghiệp vụ.
 **Câu hỏi:** Nếu client tự sửa request và gửi `doctor_id` của bác sĩ
 khác thì sao?
 
+**Ghi vào các file:**
+
+-   Body đặt lịch không dùng `doctor_id`: `backend/src/routes/appointment.route.js`
+    và `backend/src/middlewares/validate.js`
+-   Lấy bác sĩ từ slot: `backend/src/services/appointment.service.js`
+    (hàm `createAppointment`)
+-   Đọc slot: `backend/src/repositories/bookable_slot.repository.js`
+    (hàm `findSlotById` / `findSlotByIdForUpdate`)
+-   Cột `doctor_id` thuộc bảng slot: `backend/src/models/bookable_slot.model.js`,
+    `backend/src/DB/datlichkham.sql`
+
 **Cách giải quyết:** Không lấy `doctor_id` từ body để quyết định bác sĩ
 của lịch hẹn. Hệ thống phải truy vấn slot theo `bookable_slot_id`, sau
 đó lấy `doctor_id` từ bản ghi slot trong database.
+
+**Service — ghi vào `backend/src/services/appointment.service.js`:**
 
 ``` javascript
 const slot = await slotRepository.findById(data.bookable_slot_id);
@@ -288,12 +376,21 @@ không tin `doctor_id` do client gửi lên.
 **Câu hỏi:** Nếu hai lịch hẹn được tạo cùng lúc và sinh ra cùng
 `appointment_code` thì sao?
 
+**Ghi vào các file:**
+
+-   Unique trên Model: `backend/src/models/appointment.model.js`
+    (cột `appointment_code`)
+-   Unique trên Database: `backend/src/DB/datlichkham.sql`
+    (`UNIQUE` cho `appointment_code`)
+-   Sinh mã sau khi insert (`APT` + id): `backend/src/repositories/appointment.repository.js`
+    (hàm `createAppointment`)
+
 **Cách giải quyết:** - Tạo mã lịch hẹn theo cách hạn chế trùng, ví dụ
 dựa trên ID sau khi insert hoặc dùng mã ngẫu nhiên đủ dài. - Đặt ràng
 buộc `UNIQUE` cho cột `appointment_code` trong database. - Nếu phát sinh
 lỗi trùng mã, xử lý và tạo lại mã theo thiết kế.
 
-Ví dụ:
+**Model — ghi vào `backend/src/models/appointment.model.js`:**
 
 ``` javascript
 appointment_code: {
@@ -310,11 +407,21 @@ UNIQUE ở database để bảo vệ dữ liệu.
 **Câu hỏi:** Nếu lưu lịch hẹn thành công nhưng Gmail hoặc Socket bị lỗi
 thì lịch có bị hủy không?
 
+**Ghi vào các file:**
+
+-   Transaction đặt lịch + gửi mail sau commit: `backend/src/services/appointment.service.js`
+    (hàm `createAppointment`)
+-   Hàm gửi Gmail: `backend/src/utils/sendMail.js`
+-   Socket realtime: `backend/src/utils/socket.js` (`emitToDoctor`)
+-   Thông báo insystem: `backend/src/services/notification.service.js`
+
 **Cách giải quyết:** - Transaction chỉ bao gồm các thao tác dữ liệu cốt
 lõi: khóa slot, tạo bệnh nhân và tạo appointment. - Commit transaction
 trước. - Email, Socket và thông báo là tác vụ phụ, xử lý riêng sau
 commit. - Nếu gửi thất bại thì ghi log hoặc đưa vào hàng đợi để thử gửi
 lại; không rollback lịch đã tạo.
+
+**Service — ghi vào `backend/src/services/appointment.service.js` (sau khi transaction commit):**
 
 ``` javascript
 const appointment = await sequelize.transaction(async (t) => {
@@ -340,10 +447,27 @@ lịch. Lỗi thông báo không được làm mất lịch hẹn đã lưu thà
 **Câu hỏi:** Nếu hệ thống có hàng nghìn hoặc hàng triệu lịch hẹn, có nên
 lấy toàn bộ dữ liệu rồi trả về frontend không?
 
+**Ghi vào các file:**
+
+-   Query `?page=&limit=&status=&date=`: `backend/src/routes/appointment.route.js`
+    (`GET /`)
+-   Validate query: `backend/src/middlewares/validate.js`
+    (`listAppointmentQueryRules`)
+-   Parse `page`/`limit`: `backend/src/utils/pagination.js`
+    và `backend/src/constants/appointment.constants.js` (`DEFAULT_LIMIT`, `MAX_LIMIT`)
+-   Controller chuyển query: `backend/src/controllers/appointment.controller.js`
+    (hàm `getAppointmentsByDoctorId`)
+-   Service gọi list: `backend/src/services/appointment.service.js`
+    (hàm `listAppointments`)
+-   `findAndCountAll` + `limit`/`offset` + lọc: `backend/src/repositories/appointment.repository.js`
+    (hàm `listAppointmentsByDoctor`)
+
 **Cách giải quyết:** - Phân trang bằng `limit` và `offset`. - Lọc theo
 trạng thái, ngày khám ngay trong truy vấn database. - Chỉ lấy các trường
 cần thiết. - Giới hạn `limit` tối đa để client không yêu cầu quá nhiều
 dữ liệu.
+
+**Repository — ghi vào `backend/src/repositories/appointment.repository.js` (kết hợp parse page ở `backend/src/services/appointment.service.js` hoặc `backend/src/utils/pagination.js`):**
 
 ``` javascript
 const page = Math.max(Number(query.page) || 1, 1);
@@ -367,12 +491,31 @@ trả về, giảm tải server và tăng tốc độ phản hồi.
 **Câu hỏi:** Nếu bác sĩ đăng ký nghỉ một ngày nhưng đã có bệnh nhân đặt
 lịch thì hệ thống xử lý thế nào?
 
+**Ghi vào các file:**
+
+-   Route nghỉ ngày: `backend/src/routes/doctor_availability.route.js`
+    (`PATCH /day-off`)
+-   Route tắt/xóa mẫu lịch: `backend/src/routes/doctor_availability.route.js`
+    (`PATCH /:idCalendar/disable`, `DELETE /:idCalendar`)
+-   Controller: `backend/src/controllers/doctor_availability.controller.js`
+    (hàm `setDayOff`, `disableSchedule`, `deleteSchedule`)
+-   Nghiệp vụ nghỉ ngày / không xóa booked: `backend/src/services/doctor_availability.service.js`
+    (hàm `setDayOff`, `deleteSchedule`, `disableSchedule`)
+-   Update slot chưa đặt: `backend/src/repositories/bookable_slot.repository.js`
+    (hàm `updateUnbookedSlotsByDate`, `deleteUnbookedSlotsByAvailabilityFrom`,
+    `countBookedByAvailability`)
+-   Lịch còn lại trong ngày: `backend/src/repositories/appointment.repository.js`
+    (hàm `getActiveAppointmentsByDoctorAndDate`)
+-   FK CASCADE: `backend/src/DB/datlichkham.sql`
+
 **Cách giải quyết an toàn:** - Chỉ chuyển các slot `available` sang
 `off`. - Không xóa slot `booked`. - Không tự động hủy các appointment đã
 có người đặt nếu chưa có quy trình xử lý và xác nhận riêng. - Trả về
 danh sách hoặc số lượng lịch bị ảnh hưởng để bác sĩ/bộ phận phụ trách xử
 lý riêng. - Nếu tắt mẫu lịch, cần kiểm tra slot đã đặt trước khi xóa;
 tránh xóa dây chuyền làm mất lịch hẹn.
+
+**Repository / Service — ghi vào `backend/src/repositories/bookable_slot.repository.js` (gọi từ `backend/src/services/doctor_availability.service.js`, hàm `setDayOff`):**
 
 ``` javascript
 await BookableSlot.update(
@@ -401,6 +544,15 @@ bệnh nhân.
 **Câu hỏi:** JWT hết hạn thì hệ thống xử lý thế nào? Nếu bác sĩ đăng
 nhập trên máy khác thì token cũ có còn sử dụng được không?
 
+**Ghi vào các file:**
+
+-   Gắn JWT trên route: `backend/src/routes/auth.route.js` và
+    `backend/src/routes/appointment.route.js`
+-   Verify JWT, hết hạn, token máy khác: `backend/src/middlewares/auth.middleware.js`
+-   Ký token khi login (`expiresIn`): `backend/src/services/auth.service.js`
+-   Một phiên / token hiện tại: `backend/src/utils/tokenStore.js`
+-   Secret JWT: `backend/src/config/env.js`
+
 **Cách giải quyết:** - JWT được ký với thời gian hết hạn, ví dụ
 `expiresIn: "24h"`. - Middleware dùng `jwt.verify()` để kiểm tra chữ ký
 và thời hạn. - Nếu token hết hạn hoặc không hợp lệ, trả về 401. - Nếu dự
@@ -416,11 +568,20 @@ lưu phiên đang hoạt động.
 **Câu hỏi:** JWT là stateless, vậy sau khi đăng xuất hoặc đổi mật khẩu
 làm sao ngăn token cũ tiếp tục gọi API?
 
+**Ghi vào các file:**
+
+-   Blacklist token: `backend/src/utils/tokenBlacklist.js`
+    (`addToBlacklist` / `hasToken`)
+-   Kiểm tra blacklist mỗi request: `backend/src/middlewares/auth.middleware.js`
+-   Logout đưa token vào blacklist: `backend/src/services/auth.service.js`
+    và `backend/src/controllers/auth.controller.js`
+-   Route logout: `backend/src/routes/auth.route.js`
+
 **Cách giải quyết:** Có thể dùng blacklist hoặc cơ chế version/session
 để thu hồi token. Với blacklist, middleware kiểm tra token đã bị thu hồi
 trước khi cho request đi tiếp.
 
-Ví dụ minh họa trong RAM:
+**Blacklist — ghi vào `backend/src/utils/tokenBlacklist.js`:**
 
 ``` javascript
 const blacklist = new Set();
@@ -432,7 +593,7 @@ const addToBlacklist = (token) => {
 const isBlacklisted = (token) => blacklist.has(token);
 ```
 
-Middleware:
+**Kiểm tra blacklist — ghi vào `backend/src/middlewares/auth.middleware.js`:**
 
 ``` javascript
 if (isBlacklisted(token)) {
@@ -458,11 +619,21 @@ blacklist hoặc quản lý phiên/token version để middleware từ chối to
 **Câu hỏi:** Nếu người dùng viết script gọi API đặt lịch hàng trăm lần
 thì hệ thống ngăn chặn thế nào?
 
+**Ghi vào các file:**
+
+-   Middleware giới hạn request: tạo/ghi vào
+    `backend/src/middlewares/appointmentRateLimiter.js`
+    (dự án có thể chưa có file này — đây là vị trí nên đặt)
+-   Gắn trước controller đặt lịch: `backend/src/routes/appointment.route.js`
+    (`POST /create`)
+-   Kiểm tra số lịch đang hoạt động theo SĐT (nếu có): `backend/src/services/appointment.service.js`
+    + `backend/src/repositories/appointment.repository.js`
+
 **Cách giải quyết:** - Giới hạn số request theo IP trong một khoảng thời
 gian. - Có thể kiểm tra thêm số lịch `pending` hoặc `confirmed` theo số
 điện thoại. - Đặt middleware rate limit trước controller.
 
-Ví dụ minh họa:
+**Middleware — ghi vào `backend/src/middlewares/appointmentRateLimiter.js`:**
 
 ``` javascript
 const requestCounts = new Map();
@@ -491,7 +662,7 @@ const appointmentRateLimiter = (req, res, next) => {
 };
 ```
 
-Gắn vào route:
+**Gắn middleware — ghi vào `backend/src/routes/appointment.route.js`:**
 
 ``` javascript
 router.post(
@@ -514,11 +685,20 @@ thể kết hợp kiểm tra số lịch đang hoạt động theo số điện 
 **Câu hỏi:** Nếu hệ thống cache danh sách slot trống, sau khi có người
 đặt hoặc hủy lịch thì làm sao tránh hiển thị dữ liệu cũ?
 
+**Ghi vào các file:**
+
+-   Gọi xóa cache sau commit đặt/hủy: `backend/src/services/appointment.service.js`
+-   Hàm xóa cache theo bác sĩ: `backend/src/services/doctor.service.js`
+    (`invalidateDoctorCache`)
+-   Store cache: `backend/src/utils/cache.js`
+
 **Cách giải quyết:** - Sau khi transaction đặt lịch thành công, xóa
 cache slot của bác sĩ/ngày liên quan. - Sau khi hủy lịch thành công và
 mở lại slot, cũng xóa cache. - Không xóa cache trước khi transaction
 commit, tránh trường hợp transaction rollback nhưng cache đã bị xóa
 không cần thiết.
+
+**Service — ghi vào `backend/src/services/appointment.service.js` (sau `sequelize.transaction`), hàm xóa cache nằm ở `backend/src/services/doctor.service.js`:**
 
 ``` javascript
 await sequelize.transaction(async (t) => {
@@ -536,6 +716,20 @@ frontend lấy được trạng thái slot mới nhất.
 
 **Câu hỏi:** Hai cách khóa dữ liệu này khác nhau ra sao? Đồ án nên dùng
 cách nào khi hai người đặt cùng slot?
+
+**Ghi vào các file (Pessimistic — đồ án đang minh họa cách này):**
+
+-   `SELECT ... FOR UPDATE`: `backend/src/repositories/bookable_slot.repository.js`
+    (hàm `findSlotByIdForUpdate`)
+-   `UPDATE ... WHERE status = 'available'`: cùng file
+    (hàm `markSlotBookedIfAvailable`)
+-   Mở transaction: `backend/src/services/appointment.service.js`
+-   Engine InnoDB: `backend/src/DB/datlichkham.sql`
+-   Kết nối Sequelize: `backend/src/config/database.js`
+
+Optimistic locking (nếu thầy hỏi “viết thì để đâu”): thêm cột `version`
+vào `backend/src/models/bookable_slot.model.js` và điều kiện `where: { id, version }`
+trong repository; **không bắt buộc có trong đồ án**.
 
 **Cách giải quyết:** - **Pessimistic Locking:** khóa dòng dữ liệu khi
 transaction đang xử lý, ví dụ `SELECT ... FOR UPDATE`. Request khác phải
@@ -555,6 +749,14 @@ cách dễ giải thích và phù hợp cho tình huống tranh chấp.
 **Câu hỏi:** Nếu một slot chỉ được một bệnh nhân đặt, tại sao không đặt
 UNIQUE cho `bookable_slot_id` trong bảng appointment?
 
+**Đối chiếu file (không thêm UNIQUE `bookable_slot_id`):**
+
+-   Schema appointment: `backend/src/DB/datlichkham.sql`
+    (cột `bookable_slot_id` chỉ là FK, không UNIQUE)
+-   Model: `backend/src/models/appointment.model.js`
+-   Trạng thái slot (`available` / `booked`): `backend/src/models/bookable_slot.model.js`
+    và `backend/src/repositories/bookable_slot.repository.js`
+
 **Giải thích:** Nếu hệ thống lưu lại các lịch đã hủy để phục vụ lịch sử,
 nhiều dòng appointment có thể cùng tham chiếu một slot qua các lần đặt
 khác nhau. Đặt UNIQUE trực tiếp sẽ ngăn việc tạo lịch mới sau khi lịch
@@ -573,11 +775,20 @@ phép đặt lại slot sau khi hủy.
 **Câu hỏi:** Khi bác sĩ chưa có lịch hẹn nào, API nên trả 404 hay trả
 danh sách rỗng?
 
+**Ghi vào các file:**
+
+-   Danh sách rỗng → 200: `backend/src/controllers/appointment.controller.js`
+    (hàm `getAppointmentsByDoctorId`) và
+    `backend/src/services/appointment.service.js` (hàm `listAppointments`)
+-   Chi tiết không có → 404: `backend/src/services/appointment.service.js`
+    (hàm `getAppointmentDetail`, `getAppointmentByCode`)
+-   Format JSON: `backend/src/utils/response.js`
+
 **Cách giải quyết:** - Với API lấy danh sách, thường trả `200 OK` và
 mảng rỗng nếu không có dữ liệu. - Với API lấy chi tiết một bản ghi theo
 ID, nếu không tồn tại thì trả `404 Not Found`.
 
-Ví dụ danh sách:
+**Ví dụ response — Controller trả qua `backend/src/utils/response.js`:**
 
 ``` json
 {
@@ -600,11 +811,15 @@ truy vấn một bản ghi không tồn tại thì trả 404.
 **Câu hỏi:** Vì sao route cụ thể như `/code/:code` nên đặt trước route
 động `/:id`?
 
+**Ghi vào file:** `backend/src/routes/appointment.route.js`
+(các route tĩnh `/code/:code`, `/create`, `/by-status/:status` phải đứng
+trước `/:id` và `/:id/status`).
+
 **Giải thích:** Express kiểm tra các route theo thứ tự khai báo. Nếu
 route `/:id` đứng trước, request `/code/APT001` có thể khớp với route
 động ở segment đầu tiên, khiến `req.params.id` nhận giá trị `"code"`.
 
-Ví dụ:
+**Route — ghi vào `backend/src/routes/appointment.route.js`:**
 
 ``` javascript
 // Route cụ thể đặt trước
@@ -622,12 +837,21 @@ quát bắt nhầm request.
 **Câu hỏi:** Khi Service ném `ApiError(404, "...")`, lỗi đi qua những
 tầng nào và được trả về client ra sao?
 
+**Ghi vào các file:**
+
+-   Class lỗi: `backend/src/utils/apiError.js`
+-   `throw new ApiError(...)` trong Service: `backend/src/services/appointment.service.js`
+-   `next(error)` trong Controller: `backend/src/controllers/appointment.controller.js`
+-   Global handler: `backend/src/middlewares/errorHandler.js`
+-   `app.use(errorHandler)` đặt cuối: `backend/src/app.js`
+-   Gắn route gốc: `backend/src/routes/index.route.js`
+
 **Luồng xử lý:** 1. Service phát sinh lỗi bằng `throw`. 2. Controller
 chuyển lỗi bằng `next(error)` nếu đang dùng `try-catch`. 3. Global Error
 Handler nhận lỗi và tạo response JSON. 4. Middleware xử lý lỗi phải được
 khai báo sau các route.
 
-Ví dụ:
+**Error handler — ghi vào `backend/src/middlewares/errorHandler.js`:**
 
 ``` javascript
 const errorHandler = (err, req, res, next) => {
@@ -641,7 +865,7 @@ const errorHandler = (err, req, res, next) => {
 };
 ```
 
-Trong `app.js`:
+**Gắn cuối app — ghi vào `backend/src/app.js`:**
 
 ``` javascript
 app.use("/api", rootRouter);
