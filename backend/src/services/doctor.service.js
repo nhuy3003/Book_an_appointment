@@ -189,6 +189,21 @@ const invalidateDoctorCache = (doctorId) => {
   cache.delByPattern("doctors:all:");
 };
 
+const searchDoctorByName = async (keyword, maxPrice, currentId) => {
+
+  if (maxPrice <=0)
+  {
+    throw new ApiError(400, "Giá khám tối đa không được âm hoặc bằng 0");
+  }
+
+  if (!keyword)
+  {
+    throw new ApiError(400, "Please enter keyword to search!!");
+  }
+
+  return await doctorRepository.searchDoctor(keyword, maxPrice, currentId);
+}
+
 module.exports = {
   getDoctorById,
   getAllDoctors,
@@ -196,5 +211,6 @@ module.exports = {
   getAvailableSlots,
   getAvailableDates,
   updateProfile,
-  invalidateDoctorCache
+  invalidateDoctorCache,
+  searchDoctorByName
 };

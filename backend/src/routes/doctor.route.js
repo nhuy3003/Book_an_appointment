@@ -128,4 +128,8 @@ router.get("/profile", authMiddleware, doctorController.getDoctorById);
  */
 router.put("/profile", authMiddleware, doctorController.updateProfile);
 
+
+router.get("/search", doctorController.searchDoctor);
+
+
 module.exports = router;
