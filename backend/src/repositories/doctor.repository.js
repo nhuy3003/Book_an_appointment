@@ -1,4 +1,5 @@
 const { Doctor, Specialty } = require("../models/index");
+const { Op, where } = require("sequelize")
 
 // Tìm bác sĩ theo email
 const findByEmail = async (email) => {
@@ -52,10 +53,57 @@ const updateDoctor = async (id, data) => {
     return await Doctor.update(data, { where: { id } });
 };
 
+const searchDoctor = async (keyword, maxPrice, currentDoctorId = "", blockList = []) => {
+    const whereConditions = [];
+
+    if (keyword)
+    {
+        whereConditions.push({
+            [Op.or]: [
+                {full_name: {[Op.like]: `%${keyword}%`}},
+                {bio: {[Op.like]: `%${keyword}%`}},
+            ]
+        });
+    }
+
+    if (maxPrice)
+    {
+        whereConditions.push({
+            price_per_appointment: {[Op.lte]: Number(maxPrice)}
+        });
+    }
+
+    if (currentDoctorId)
+    {
+        whereConditions.push({
+            id: {[Op.ne]: currentDoctorId} 
+        });
+    }
+
+    if (blockList && blockList.length > 0)
+    {
+        whereConditions.push({
+            id: {[Op.notIn]: blockList}
+        });
+    }
+
+    return await Doctor.findAll({
+        where: {
+            [Op.and]: whereConditions
+        },
+        attributes: ["id", "full_name", "email", "phone_number", "price_per_appointment", "bio"],
+        include: [{
+            model: Specialty, 
+            attributes: 
+                ["id", "specialty_name"]}]
+    });
+}
+
 module.exports = {
     findByEmail,
     findDoctorById,
     findAllDoctors,
     updatePassword,
-    updateDoctor
+    updateDoctor,
+    searchDoctor
 };

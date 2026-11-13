@@ -71,11 +71,23 @@ const updateProfile = async (req, res, next) => {
   }
 };
 
+const searchDoctor = async (req, res, next) => {
+  try {
+    const doctorId = req.user?.id || null;
+    const { keyword, maxPrice } = req.query;
+    const searchedDoctors = await doctorService.searchDoctorByName(keyword, maxPrice, doctorId);
+    return response.success(res, searchedDoctors, "Lấy danh sách tìm kiếm bác sĩ thành công");
+  } catch (error) {
+    next(error);
+  }
+};
+
 module.exports = {
     getDoctorById,
     updateProfile,
     getAllDoctors,
     getAllSpecialties,
     getAvailableSlots,
-    getAvailableDates
+    getAvailableDates,
+    searchDoctor
 };
